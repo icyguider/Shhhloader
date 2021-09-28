@@ -1,5 +1,5 @@
 # Shhhloader
-Shhhloader is a SysWhispers Shellcode Loader that is currently a Work in Progress. It takes raw shellcode as input and compilies a C++ stub that has been integrated with SysWhispers in order to bypass AV/EDR. The included python builder will work on any Linux system that has Mingw-w64 installed. 
+Shhhloader is a SysWhispers Shellcode Loader that is currently a Work in Progress. It takes raw shellcode as input and compiles a C++ stub that has been integrated with SysWhispers in order to bypass AV/EDR. The included python builder will work on any Linux system that has Mingw-w64 installed. 
 
 The tool has been confirmed to successfully load a Cobalt Strike beacon on fully updated systems with Windows Defender enabled. The project itself is still in a PoC/WIP state, as it currently doesn't work with all payloads. 
 
@@ -22,8 +22,10 @@ positional arguments:
 optional arguments:
   -h, --help            show this help message and exit
   -o a.exe, --outfile a.exe
-                        Name of compilied file
+                        Name of compiled file
 ```
+Video Demo: https://www.youtube.com/watch?v=ttCRiobmulU
+
 Features:
 * XOR Encryption with Dynamic Key Generation
 * Sandbox Evasion via Loaded DLL Enumeration
