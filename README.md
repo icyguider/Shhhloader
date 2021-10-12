@@ -27,6 +27,7 @@ optional arguments:
 Video Demo: https://www.youtube.com/watch?v=ttCRiobmulU
 
 Features:
+* Suspended Thread Injection (Credit: [plackyhacker](https://github.com/plackyhacker/SuspendedThreadInjection))
 * XOR Encryption with Dynamic Key Generation
 * Sandbox Evasion via Loaded DLL Enumeration
 
@@ -35,7 +36,12 @@ Tested and Confirmed Working on:
 * Windows 10 20H2 (10.0.19042)
 * Windows Server 2019 (10.0.17763)
 
+Scan Results: https://antiscan.me/scan/new/result?id=Ff2LlAHku96p
+
+![Scan](https://antiscan.me/images/result/Ff2LlAHku96p.png)
+
 Greetz & Credit:
 * Jthuraisamy for his amazing project SysWhispers: https://github.com/jthuraisamy/SysWhispers
 * OutFlank for creating InlineWhispers (Mingw-w64 Compatible SysWhispers): https://github.com/outflanknl/InlineWhispers
 * FalconForceTeam for their syscall generation tool that supports SysWhispers2: https://github.com/FalconForceTeam/SysWhispers2BOF
+* Plackyhacker for their Suspended Thread Injection technique: https://github.com/plackyhacker/SuspendedThreadInjection
