@@ -240,7 +240,7 @@ def main(stub, infile, outfile, key, amsi):
         print("[!] {} has been compilied successfully!".format(outfile))
     else:
         print("[!] Stub compilation failed! Something went wrong!")
-    #os.system("rm stub.cpp")
+    os.system("rm stub.cpp")
 
 
 print(inspiration[1:-1])
