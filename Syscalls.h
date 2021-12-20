@@ -8,7 +8,7 @@
 
 #include <windows.h>
 
-#define SW2_SEED 0xBDCD875A
+#define SW2_SEED 0x5B1E86E5
 #define SW2_ROL8(v) (v << 8 | v >> 24)
 #define SW2_ROR8(v) (v >> 8 | v << 24)
 #define SW2_ROX8(v) ((SW2_SEED % 2) ? SW2_ROL8(v) : SW2_ROR8(v))
@@ -19,10 +19,20 @@
 
 typedef struct _UNICODE_STRING
 {
-	USHORT Length;
-	USHORT MaximumLength;
-	PWSTR  Buffer;
+USHORT Length;
+USHORT MaximumLength;
+PWSTR Buffer;
 } UNICODE_STRING, *PUNICODE_STRING;
+
+typedef struct _OBJECT_ATTRIBUTES
+{
+ULONG Length;
+HANDLE RootDirectory;
+PUNICODE_STRING ObjectName;
+ULONG Attributes;
+PVOID SecurityDescriptor;
+PVOID SecurityQualityOfService;
+} OBJECT_ATTRIBUTES, *POBJECT_ATTRIBUTES;
 
 typedef struct _SW2_SYSCALL_ENTRY
 {
@@ -61,6 +71,7 @@ DWORD SW2_HashSyscall(PCSTR FunctionName);
 BOOL SW2_PopulateSyscallList();
 EXTERN_C DWORD SW2_GetSyscallNumber(DWORD FunctionHash);
 
+
 typedef struct _PS_ATTRIBUTE
 {
 	ULONG  Attribute;
@@ -73,16 +84,6 @@ typedef struct _PS_ATTRIBUTE
 	PSIZE_T ReturnLength;
 } PS_ATTRIBUTE, *PPS_ATTRIBUTE;
 
-typedef struct _OBJECT_ATTRIBUTES
-{
-	ULONG           Length;
-	HANDLE          RootDirectory;
-	PUNICODE_STRING ObjectName;
-	ULONG           Attributes;
-	PVOID           SecurityDescriptor;
-	PVOID           SecurityQualityOfService;
-} OBJECT_ATTRIBUTES, *POBJECT_ATTRIBUTES;
-
 #ifndef InitializeObjectAttributes
 #define InitializeObjectAttributes( p, n, a, r, s ) { \
 	(p)->Length = sizeof( OBJECT_ATTRIBUTES );        \
@@ -93,7 +94,6 @@ typedef struct _OBJECT_ATTRIBUTES
 	(p)->SecurityQualityOfService = NULL;             \
 }
 #endif
-
 
 
 typedef struct _PS_ATTRIBUTE_LIST
@@ -129,6 +129,28 @@ EXTERN_C NTSTATUS NtAllocateVirtualMemory(
 	IN OUT PSIZE_T RegionSize,
 	IN ULONG AllocationType,
 	IN ULONG Protect);
+
+EXTERN_C NTSTATUS NtWriteVirtualMemory(
+	IN HANDLE ProcessHandle,
+	IN PVOID BaseAddress,
+	IN PVOID Buffer,
+	IN SIZE_T NumberOfBytesToWrite,
+	OUT PSIZE_T NumberOfBytesWritten OPTIONAL);
+
+EXTERN_C NTSTATUS NtResumeThread(
+	IN HANDLE ThreadHandle,
+	IN OUT PULONG PreviousSuspendCount OPTIONAL);
+
+EXTERN_C NTSTATUS NtFreeVirtualMemory(
+	IN HANDLE ProcessHandle,
+	IN OUT PVOID * BaseAddress,
+	IN OUT PSIZE_T RegionSize,
+	IN ULONG FreeType);
+
+EXTERN_C NTSTATUS NtWaitForSingleObject(
+	IN HANDLE ObjectHandle,
+	IN BOOLEAN Alertable,
+	IN PLARGE_INTEGER TimeOut OPTIONAL);
 
 #endif
 
@@ -258,7 +280,7 @@ __asm__("NtCreateThreadEx: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x0425EBC28\n\
+	mov ecx, 0x044C7003A\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -276,7 +298,7 @@ __asm__("NtProtectVirtualMemory: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x08B97E370\n\
+	mov ecx, 0x043D1AE45\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -284,6 +306,7 @@ __asm__("NtProtectVirtualMemory: \n\
 	mov r8, [rsp+24]\n\
 	mov r9, [rsp+32]\n\
 	mov r10, rcx\n\
+	nop\n\
 	syscall\n\
 	ret\n\
 ");
@@ -294,7 +317,7 @@ __asm__("NtAllocateVirtualMemory: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x04392772D\n\
+	mov ecx, 0x00F92E4F7\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -302,6 +325,83 @@ __asm__("NtAllocateVirtualMemory: \n\
 	mov r8, [rsp+24]\n\
 	mov r9, [rsp+32]\n\
 	mov r10, rcx\n\
+	nop\n\
+	syscall\n\
+	ret\n\
+");
+#define ZwWriteVirtualMemory NtWriteVirtualMemory
+__asm__("NtWriteVirtualMemory: \n\
+	mov [rsp +8], rcx\n\
+	mov [rsp+16], rdx\n\
+	mov [rsp+24], r8\n\
+	mov [rsp+32], r9\n\
+	sub rsp, 0x28\n\
+	mov ecx, 0x08092C05B\n\
+	call SW2_GetSyscallNumber\n\
+	add rsp, 0x28\n\
+	mov rcx, [rsp +8]\n\
+	mov rdx, [rsp+16]\n\
+	mov r8, [rsp+24]\n\
+	mov r9, [rsp+32]\n\
+	mov r10, rcx\n\
+	nop\n\
+	syscall\n\
+	ret\n\
+");
+#define ZwResumeThread NtResumeThread
+__asm__("NtResumeThread: \n\
+	mov [rsp +8], rcx\n\
+	mov [rsp+16], rdx\n\
+	mov [rsp+24], r8\n\
+	mov [rsp+32], r9\n\
+	sub rsp, 0x28\n\
+	mov ecx, 0x02208EF21\n\
+	call SW2_GetSyscallNumber\n\
+	add rsp, 0x28\n\
+	mov rcx, [rsp +8]\n\
+	mov rdx, [rsp+16]\n\
+	mov r8, [rsp+24]\n\
+	mov r9, [rsp+32]\n\
+	mov r10, rcx\n\
+	nop\n\
+	syscall\n\
+	ret\n\
+");
+#define ZwFreeVirtualMemory NtFreeVirtualMemory
+__asm__("NtFreeVirtualMemory: \n\
+	mov [rsp +8], rcx\n\
+	mov [rsp+16], rdx\n\
+	mov [rsp+24], r8\n\
+	mov [rsp+32], r9\n\
+	sub rsp, 0x28\n\
+	mov ecx, 0x01D97091B\n\
+	call SW2_GetSyscallNumber\n\
+	add rsp, 0x28\n\
+	mov rcx, [rsp +8]\n\
+	mov rdx, [rsp+16]\n\
+	mov r8, [rsp+24]\n\
+	mov r9, [rsp+32]\n\
+	mov r10, rcx\n\
+	nop\n\
+	syscall\n\
+	ret\n\
+");
+#define ZwWaitForSingleObject NtWaitForSingleObject
+__asm__("NtWaitForSingleObject: \n\
+	mov [rsp +8], rcx\n\
+	mov [rsp+16], rdx\n\
+	mov [rsp+24], r8\n\
+	mov [rsp+32], r9\n\
+	sub rsp, 0x28\n\
+	mov ecx, 0x08C9F7493\n\
+	call SW2_GetSyscallNumber\n\
+	add rsp, 0x28\n\
+	mov rcx, [rsp +8]\n\
+	mov rdx, [rsp+16]\n\
+	mov r8, [rsp+24]\n\
+	mov r9, [rsp+32]\n\
+	mov r10, rcx\n\
+	nop\n\
 	syscall\n\
 	ret\n\
 ");
