@@ -8,7 +8,7 @@
 
 #include <windows.h>
 
-#define SW2_SEED 0x5B1E86E5
+#define SW2_SEED 0x31DA0016
 #define SW2_ROL8(v) (v << 8 | v >> 24)
 #define SW2_ROR8(v) (v >> 8 | v << 24)
 #define SW2_ROX8(v) ((SW2_SEED % 2) ? SW2_ROL8(v) : SW2_ROR8(v))
@@ -16,23 +16,6 @@
 #define SW2_RVA2VA(Type, DllBase, Rva) (Type)((ULONG_PTR) DllBase + Rva)
 
 // Typedefs are prefixed to avoid pollution.
-
-typedef struct _UNICODE_STRING
-{
-USHORT Length;
-USHORT MaximumLength;
-PWSTR Buffer;
-} UNICODE_STRING, *PUNICODE_STRING;
-
-typedef struct _OBJECT_ATTRIBUTES
-{
-ULONG Length;
-HANDLE RootDirectory;
-PUNICODE_STRING ObjectName;
-ULONG Attributes;
-PVOID SecurityDescriptor;
-PVOID SecurityQualityOfService;
-} OBJECT_ATTRIBUTES, *POBJECT_ATTRIBUTES;
 
 typedef struct _SW2_SYSCALL_ENTRY
 {
@@ -72,18 +55,6 @@ BOOL SW2_PopulateSyscallList();
 EXTERN_C DWORD SW2_GetSyscallNumber(DWORD FunctionHash);
 
 
-typedef struct _PS_ATTRIBUTE
-{
-	ULONG  Attribute;
-	SIZE_T Size;
-	union
-	{
-		ULONG Value;
-		PVOID ValuePtr;
-	} u1;
-	PSIZE_T ReturnLength;
-} PS_ATTRIBUTE, *PPS_ATTRIBUTE;
-
 #ifndef InitializeObjectAttributes
 #define InitializeObjectAttributes( p, n, a, r, s ) { \
 	(p)->Length = sizeof( OBJECT_ATTRIBUTES );        \
@@ -95,25 +66,30 @@ typedef struct _PS_ATTRIBUTE
 }
 #endif
 
-
-typedef struct _PS_ATTRIBUTE_LIST
+/*
+typedef enum _PROCESSINFOCLASS
 {
-	SIZE_T       TotalLength;
-	PS_ATTRIBUTE Attributes[1];
-} PS_ATTRIBUTE_LIST, *PPS_ATTRIBUTE_LIST;
+	ProcessBasicInformation = 0,
+	ProcessDebugPort = 7,
+	ProcessWow64Information = 26,
+	ProcessImageFileName = 27,
+	ProcessBreakOnTermination = 29
+} PROCESSINFOCLASS, *PPROCESSINFOCLASS;
+*/
 
-EXTERN_C NTSTATUS NtCreateThreadEx(
-	OUT PHANDLE ThreadHandle,
-	IN ACCESS_MASK DesiredAccess,
-	IN POBJECT_ATTRIBUTES ObjectAttributes OPTIONAL,
+EXTERN_C NTSTATUS NtQueryInformationProcess(
 	IN HANDLE ProcessHandle,
-	IN PVOID StartRoutine,
-	IN PVOID Argument OPTIONAL,
-	IN ULONG CreateFlags,
-	IN SIZE_T ZeroBits,
-	IN SIZE_T StackSize,
-	IN SIZE_T MaximumStackSize,
-	IN PPS_ATTRIBUTE_LIST AttributeList OPTIONAL);
+	IN PROCESSINFOCLASS ProcessInformationClass,
+	OUT PVOID ProcessInformation,
+	IN ULONG ProcessInformationLength,
+	OUT PULONG ReturnLength OPTIONAL);
+
+EXTERN_C NTSTATUS NtReadVirtualMemory(
+	IN HANDLE ProcessHandle,
+	IN PVOID BaseAddress OPTIONAL,
+	OUT PVOID Buffer,
+	IN SIZE_T BufferSize,
+	OUT PSIZE_T NumberOfBytesRead OPTIONAL);
 
 EXTERN_C NTSTATUS NtProtectVirtualMemory(
 	IN HANDLE ProcessHandle,
@@ -121,14 +97,6 @@ EXTERN_C NTSTATUS NtProtectVirtualMemory(
 	IN OUT PSIZE_T RegionSize,
 	IN ULONG NewProtect,
 	OUT PULONG OldProtect);
-
-EXTERN_C NTSTATUS NtAllocateVirtualMemory(
-	IN HANDLE ProcessHandle,
-	IN OUT PVOID * BaseAddress,
-	IN ULONG ZeroBits,
-	IN OUT PSIZE_T RegionSize,
-	IN ULONG AllocationType,
-	IN ULONG Protect);
 
 EXTERN_C NTSTATUS NtWriteVirtualMemory(
 	IN HANDLE ProcessHandle,
@@ -141,16 +109,14 @@ EXTERN_C NTSTATUS NtResumeThread(
 	IN HANDLE ThreadHandle,
 	IN OUT PULONG PreviousSuspendCount OPTIONAL);
 
-EXTERN_C NTSTATUS NtFreeVirtualMemory(
-	IN HANDLE ProcessHandle,
-	IN OUT PVOID * BaseAddress,
-	IN OUT PSIZE_T RegionSize,
-	IN ULONG FreeType);
+EXTERN_C NTSTATUS NtClose(
+	IN HANDLE Handle);
 
-EXTERN_C NTSTATUS NtWaitForSingleObject(
-	IN HANDLE ObjectHandle,
-	IN BOOLEAN Alertable,
-	IN PLARGE_INTEGER TimeOut OPTIONAL);
+EXTERN_C NTSTATUS NtOpenProcess(
+	OUT PHANDLE ProcessHandle,
+	IN ACCESS_MASK DesiredAccess,
+	IN POBJECT_ATTRIBUTES ObjectAttributes,
+	IN PCLIENT_ID ClientId OPTIONAL);
 
 #endif
 
@@ -273,32 +239,14 @@ EXTERN_C DWORD SW2_GetSyscallNumber(DWORD FunctionHash)
 
     return -1;
 }
-#define ZwCreateThreadEx NtCreateThreadEx
-__asm__("NtCreateThreadEx: \n\
+#define ZwQueryInformationProcess NtQueryInformationProcess
+__asm__("NtQueryInformationProcess: \n\
 	mov [rsp +8], rcx\n\
 	mov [rsp+16], rdx\n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x044C7003A\n\
-	call SW2_GetSyscallNumber\n\
-	add rsp, 0x28\n\
-	mov rcx, [rsp +8]\n\
-	mov rdx, [rsp+16]\n\
-	mov r8, [rsp+24]\n\
-	mov r9, [rsp+32]\n\
-	mov r10, rcx\n\
-	syscall\n\
-	ret\n\
-");
-#define ZwProtectVirtualMemory NtProtectVirtualMemory
-__asm__("NtProtectVirtualMemory: \n\
-	mov [rsp +8], rcx\n\
-	mov [rsp+16], rdx\n\
-	mov [rsp+24], r8\n\
-	mov [rsp+32], r9\n\
-	sub rsp, 0x28\n\
-	mov ecx, 0x043D1AE45\n\
+	mov ecx, 0x005B72224\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -310,14 +258,33 @@ __asm__("NtProtectVirtualMemory: \n\
 	syscall\n\
 	ret\n\
 ");
-#define ZwAllocateVirtualMemory NtAllocateVirtualMemory
-__asm__("NtAllocateVirtualMemory: \n\
+#define ZwReadVirtualMemory NtReadVirtualMemory
+__asm__("NtReadVirtualMemory: \n\
 	mov [rsp +8], rcx\n\
 	mov [rsp+16], rdx\n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x00F92E4F7\n\
+	mov ecx, 0x0C655F2E8\n\
+	call SW2_GetSyscallNumber\n\
+	add rsp, 0x28\n\
+	mov rcx, [rsp +8]\n\
+	mov rdx, [rsp+16]\n\
+	mov r8, [rsp+24]\n\
+	mov r9, [rsp+32]\n\
+	mov r10, rcx\n\
+	nop\n\
+	syscall\n\
+	ret\n\
+");
+#define ZwProtectVirtualMemory NtProtectVirtualMemory
+__asm__("NtProtectVirtualMemory: \n\
+	mov [rsp +8], rcx\n\
+	mov [rsp+16], rdx\n\
+	mov [rsp+24], r8\n\
+	mov [rsp+32], r9\n\
+	sub rsp, 0x28\n\
+	mov ecx, 0x0C993FD2F\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -336,7 +303,7 @@ __asm__("NtWriteVirtualMemory: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x08092C05B\n\
+	mov ecx, 0x0F152F7DD\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -355,7 +322,7 @@ __asm__("NtResumeThread: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x02208EF21\n\
+	mov ecx, 0x029AB352A\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -367,14 +334,14 @@ __asm__("NtResumeThread: \n\
 	syscall\n\
 	ret\n\
 ");
-#define ZwFreeVirtualMemory NtFreeVirtualMemory
-__asm__("NtFreeVirtualMemory: \n\
+#define ZwClose NtClose
+__asm__("NtClose: \n\
 	mov [rsp +8], rcx\n\
 	mov [rsp+16], rdx\n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x01D97091B\n\
+	mov ecx, 0x0D8CDCA60\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -386,14 +353,14 @@ __asm__("NtFreeVirtualMemory: \n\
 	syscall\n\
 	ret\n\
 ");
-#define ZwWaitForSingleObject NtWaitForSingleObject
-__asm__("NtWaitForSingleObject: \n\
+#define ZwOpenProcess NtOpenProcess
+__asm__("NtOpenProcess: \n\
 	mov [rsp +8], rcx\n\
 	mov [rsp+16], rdx\n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x08C9F7493\n\
+	mov ecx, 0x04FAF4E3E\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\

