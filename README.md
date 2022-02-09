@@ -3,7 +3,7 @@ Shhhloader is a SysWhispers Shellcode Loader that is currently a Work in Progres
 
 The tool has been confirmed to successfully load Meterpreter and a Cobalt Strike beacon on fully updated systems with Windows Defender enabled. The project itself is still in a PoC/WIP state, as it currently doesn't work with all payloads.
 
-**1/21/22 EDIT: Shhhloader now uses process hollowing! See below for updated usage. Staged Meterpreter and Cobalt Strike beacons have been confirmed to work. Stageless payloads are currently not working, so stay tuned for further updates!**
+**2/9/22 EDIT: Shhhloader now includes 5 different ways to execute your shellcode! See below for updated usage. Big thanks to [@Snovvcrash](https://github.com/snovvcrash) and their [DInjector](https://github.com/snovvcrash/DInjector) project for inspiration! I highly recommend taking a look at it for more information regarding the shellcode injection techniques and code that this tool is now based on.**
 
 ```
 ┳┻|
@@ -14,7 +14,7 @@ The tool has been confirmed to successfully load Meterpreter and a Cobalt Strike
 ┻┳| •.•)  - Shhhhh, AV might hear us! 
 ┳┻|⊂ﾉ   
 ┻┳|
-usage: Shhhloader.py [-h] [-p explorer.exe] [-o a.exe] file
+usage: Shhhloader.py [-h] [-p explorer.exe] [-m QueueUserAPC] [-nr] [-v] [-o a.exe] file
 
 ICYGUIDER'S CUSTOM SYSWHISPERS SHELLCODE LOADER
 
@@ -25,13 +25,21 @@ optional arguments:
   -h, --help            show this help message and exit
   -p explorer.exe, --process explorer.exe
                         Process to inject into (Default: explorer.exe)
+  -m QueueUserAPC, --method QueueUserAPC
+                        Method for shellcode execution (Options: ProcessHollow, QueueUserAPC,
+                        RemoteThreadContext, RemoteThreadSuspended, CurrentThread) (Default: QueueUserAPC)
+  -nr, --no-randomize   Disable syscall name randomization
+  -v, --verbose         Enable debugging messages upon execution
   -o a.exe, --outfile a.exe
                         Name of compiled file
 ```
 Video Demo: https://www.youtube.com/watch?v=-KLGV_aGYbw
 
 Features:
-* Process Hollowing
+* 5 Different Shellcode Execution Methods (ProcessHollow, QueueUserAPC, RemoteThreadContext, RemoteThreadSuspended, CurrentThread)
+* PPID Spoofing
+* Block 3rd Party DLLs
+* Syscall Name Randomization
 * XOR Encryption with Dynamic Key Generation
 * Sandbox Evasion via Loaded DLL Enumeration
 
@@ -40,12 +48,14 @@ Tested and Confirmed Working on:
 * Windows 10 20H2 (10.0.19042)
 * Windows Server 2019 (10.0.17763)
 
-Scan Results as of 1/21/22 (x64 Meterpreter): https://antiscan.me/scan/new/result?id=VmGJxUdXVcYr
+Scan Results as of 2/9/22 (x64 Meterpreter QueueUserAPC): https://antiscan.me/scan/new/result?id=tntuLnCkTCwz
 
-![Scan](https://antiscan.me/images/result/VmGJxUdXVcYr.png)
+![Scan](https://antiscan.me/images/result/tntuLnCkTCwz.png)
 
 Greetz & Credit:
 * Jthuraisamy for his amazing project SysWhispers: https://github.com/jthuraisamy/SysWhispers
 * OutFlank for creating InlineWhispers (Mingw-w64 Compatible SysWhispers): https://github.com/outflanknl/InlineWhispers
 * FalconForceTeam for their syscall generation tool that supports SysWhispers2: https://github.com/FalconForceTeam/SysWhispers2BOF
 * Snovvcrash for their NimHollow project, which I used as a template for process hollowing: https://github.com/snovvcrash/NimHollow
+* Snovvcrash again for their DInjector project, which I used as a template for many of the included injection techniques: https://github.com/snovvcrash/DInjector
+* Cerbersec for their Ares project, whose code I used for PPID Spoofing and Blocking 3rd Party DLLs: https://github.com/Cerbersec/Ares
