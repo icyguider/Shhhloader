@@ -870,7 +870,7 @@ parser.add_argument('-p', '--process', dest='process', help='Process to inject i
 parser.add_argument('-m', '--method', dest='method', help='Method for shellcode execution (Options: ProcessHollow, QueueUserAPC, RemoteThreadContext, RemoteThreadSuspended, CurrentThread) (Default: QueueUserAPC)', metavar='QueueUserAPC', default='QueueUserAPC')
 parser.add_argument('-nr', '--no-randomize', action='store_true', help='Disable syscall name randomization')
 parser.add_argument('-v', '--verbose', action='store_true', help='Enable debugging messages upon execution')
-parser.add_argument('-d', '--dll-sandbox', action='store_true', help='Enable dll based sandbox checks instead of the regular ones (works in VMs)')
+parser.add_argument('-d', '--dll-sandbox', action='store_true', help='Use DLL based sandbox checks instead of the standard ones')
 parser.add_argument('-o', '--outfile', dest='out', help='Name of compiled file', metavar='a.exe', default='a.exe')
 
 if len(sys.argv) < 2:
