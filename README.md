@@ -14,7 +14,7 @@ The tool has been confirmed to successfully load Meterpreter and a Cobalt Strike
 ┻┳| •.•)  - Shhhhh, AV might hear us! 
 ┳┻|⊂ﾉ   
 ┻┳|
-usage: Shhhloader.py [-h] [-p explorer.exe] [-m QueueUserAPC] [-nr] [-v] [-o a.exe] file
+usage: Shhhloader.py [-h] [-p explorer.exe] [-m QueueUserAPC] [-nr] [-v] [-d] [-o a.exe] file
 
 ICYGUIDER'S CUSTOM SYSWHISPERS SHELLCODE LOADER
 
@@ -30,6 +30,7 @@ optional arguments:
                         RemoteThreadContext, RemoteThreadSuspended, CurrentThread) (Default: QueueUserAPC)
   -nr, --no-randomize   Disable syscall name randomization
   -v, --verbose         Enable debugging messages upon execution
+  -d, --dll-sandbox     Use DLL based sandbox checks instead of the standard ones
   -o a.exe, --outfile a.exe
                         Name of compiled file
 ```
@@ -42,6 +43,7 @@ Features:
 * Syscall Name Randomization
 * XOR Encryption with Dynamic Key Generation
 * Sandbox Evasion via Loaded DLL Enumeration
+* Sandbox Evasion via Checking Processors, Memory, and Time
 
 Tested and Confirmed Working on:
 * Windows 10 21H1 (10.0.19043)
@@ -58,4 +60,4 @@ Greetz & Credit:
 * FalconForceTeam for their syscall generation tool that supports SysWhispers2: https://github.com/FalconForceTeam/SysWhispers2BOF
 * Snovvcrash for their NimHollow project, which I used as a template for process hollowing: https://github.com/snovvcrash/NimHollow
 * Snovvcrash again for their DInjector project, which I used as a template for many of the included injection techniques: https://github.com/snovvcrash/DInjector
-* Cerbersec for their Ares project, whose code I used for PPID Spoofing and Blocking 3rd Party DLLs: https://github.com/Cerbersec/Ares
+* Cerbersec for their Ares project, whose code I used for PPID Spoofing, Blocking 3rd Party DLLs and Sandbox Evasion: https://github.com/Cerbersec/Ares
