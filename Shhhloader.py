@@ -852,9 +852,9 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, dll
     print("[+] Saved new stub to stub.cpp")
     print("[+] Compiling new stub...")
     if verbose == True:
-        os.system("x86_64-w64-mingw32-g++ stub.cpp -w -masm=intel -fpermissive -static -lpsapi -Wl,--subsystem,console -o {}".format(outfile))
+        os.system("x86_64-w64-mingw32-g++ stub.cpp -s -w -masm=intel -fpermissive -static -lpsapi -Wl,--subsystem,console -o {}".format(outfile))
     else:
-        os.system("x86_64-w64-mingw32-g++ stub.cpp -w -masm=intel -fpermissive -static -lpsapi -Wl,--subsystem,windows -o {}".format(outfile))
+        os.system("x86_64-w64-mingw32-g++ stub.cpp -s -w -masm=intel -fpermissive -static -lpsapi -Wl,--subsystem,windows -o {}".format(outfile))
     if os.path.exists(outfile) == True:
         print("[!] {} has been compiled successfully!".format(outfile))
     else:
