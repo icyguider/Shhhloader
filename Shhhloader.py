@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 #Created by Matthew David (@icyguider)
-import sys, os, argparse, random, string
+import sys, os, argparse, random, string, tempfile
 
 inspiration = """
 ┳┻|
@@ -763,8 +763,8 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, dll
         #If you know why this is happening, feel free to reach out to me!
         with open(infile, 'rb') as contents:
             save = contents.read()
-        tempfile = "temp_{}".format(infile)
-        with open(tempfile, 'wb') as contents:
+        fp = tempfile.TemporaryFile(prefix="temp_")
+        with open(fp, 'wb') as contents:
             contents.write(b"\x90"*5000)
             contents.write(save)
         file = open(tempfile, 'rb')
