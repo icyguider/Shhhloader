@@ -765,7 +765,7 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, dll
         with open(infile, 'rb') as contents:
             save = contents.read()
         tempfile = tp.TemporaryFile(prefix="temp_")
-        with open(fp, 'wb') as contents:
+        with open(tempfile, 'wb') as contents:
             contents.write(b"\x90"*5000)
             contents.write(save)
         file = open(tempfile, 'rb')
