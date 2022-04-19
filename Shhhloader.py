@@ -763,7 +763,7 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, dll
         #If you know why this is happening, feel free to reach out to me!
         with open(infile, 'rb') as contents:
             save = contents.read()
-        tempfile = "temp_{}".format(infile)
+        tempfile = "temp_infile"
         with open(tempfile, 'wb') as contents:
             contents.write(b"\x90"*5000)
             contents.write(save)
