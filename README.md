@@ -115,7 +115,8 @@ There is probably a better way to do this but this is what worked for me. If you
 Greetz & Credit:
 * [@Jackson_T](https://twitter.com/Jackson_T) for his amazing project SysWhispers: https://github.com/jthuraisamy/SysWhispers
 * [@FalconForceTeam](https://twitter.com/falconforceteam) for their syscall generation tool that supports SysWhispers2: https://github.com/FalconForceTeam/SysWhispers2BOF
-* [@Snovvcrash](https://twitter.com/snovvcrash) for their DInjector project, which I used as a template for many of the included injection techniques: https://github.com/snovvcrash/DInjector
+* [@snovvcrash](https://twitter.com/snovvcrash) for their DInjector project, which I used as a template for many of the included injection techniques: https://github.com/snovvcrash/DInjector
 * [@Cerbersec](https://twitter.com/cerbersec) for their Ares project, whose code I used for PPID Spoofing, Blocking 3rd Party DLLs and Sandbox Evasion: https://github.com/Cerbersec/Ares
 * [@spotheplanet](https://twitter.com/spotheplanet) for their blog post on Retrieving ntdll Syscall Stubs from Disk at Run-time: https://www.ired.team/offensive-security/defense-evasion/retrieving-ntdll-syscall-stubs-at-run-time
 * [@_RastaMouse](https://twitter.com/_RastaMouse) for his code and article on Module Stomping which I ported to C++: https://offensivedefence.co.uk/posts/module-stomping/
+* [@s4ntiago_p](https://twitter.com/s4ntiago_p) for their NanoDump project and the [randomize_sw2_seed.py](https://github.com/helpsystems/nanodump/blob/main/scripts/randomize_sw2_seed.py) script in particular: https://github.com/helpsystems/nanodump
