@@ -8,7 +8,7 @@
 
 #include <windows.h>
 
-#define SW2_SEED 0xDB4F38C0
+#define SW2_SEED 0x1337C0DE
 #define SW2_ROL8(v) (v << 8 | v >> 24)
 #define SW2_ROR8(v) (v >> 8 | v << 24)
 #define SW2_ROX8(v) ((SW2_SEED % 2) ? SW2_ROL8(v) : SW2_ROR8(v))
@@ -320,7 +320,7 @@ __asm__("NtQueryInformationProcess: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x082189195\n\
+	mov ecx, 0xBDBCBC205\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -339,7 +339,7 @@ __asm__("NtReadVirtualMemory: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x04216568B\n\
+	mov ecx, 0x118B7567B\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -358,7 +358,7 @@ __asm__("NtProtectVirtualMemory: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x031A23F35\n\
+	mov ecx, 0x3D5335D35\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -377,7 +377,7 @@ __asm__("NtWriteVirtualMemory: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x003952937\n\
+	mov ecx, 0x0F9124C37\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -396,7 +396,7 @@ __asm__("NtResumeThread: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x068CE5A67\n\
+	mov ecx, 0x1339598F7\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -415,7 +415,7 @@ __asm__("NtClose: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x04ED5B749\n\
+	mov ecx, 0x2252D33F9\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -434,7 +434,7 @@ __asm__("NtOpenProcess: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x0F93ADEA8\n\
+	mov ecx, 0xCD9B2A0F8\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -453,7 +453,7 @@ __asm__("NtAllocateVirtualMemory: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x01D950B1B\n\
+	mov ecx, 0x0595031BB\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -472,7 +472,7 @@ __asm__("NtCreateThreadEx: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x00DA2CEFE\n\
+	mov ecx, 0x113F55E3E\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -491,7 +491,7 @@ __asm__("NtWaitForSingleObject: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x01AA32E1B\n\
+	mov ecx, 0x426376E3B\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -510,7 +510,7 @@ __asm__("NtQueueApcThread: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x0AC80B626\n\
+	mov ecx, 0xC6C50BE46\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -529,7 +529,7 @@ __asm__("NtAlertResumeThread: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x022811E21\n\
+	mov ecx, 0xCD5E37C01\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -548,7 +548,7 @@ __asm__("NtGetContextThread: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x0329CFC36\n\
+	mov ecx, 0xBA9EF43C6\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -567,7 +567,7 @@ __asm__("NtSetContextThread: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x0B89F3EB5\n\
+	mov ecx, 0xCB668D445\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -586,7 +586,7 @@ __asm__("NtDelayExecution: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x0FCBE3BEA\n\
+	mov ecx, 0xB6EB75BAA\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
