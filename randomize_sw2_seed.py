@@ -26,10 +26,9 @@ def replace_seed(old_seed, new_seed):
 		f.write(code)
 
 
-def get_function_hash(seed, function_name, is_syscall=True):
+def get_function_hash(seed, function_name):
 	function_hash = seed
-	function_name = function_name.replace('_', '')
-	if is_syscall and function_name[:2] == 'Nt':
+	if function_name[:2] == 'Nt':
 		function_name = 'Zw' + function_name[2:]
 	name = function_name + '\0'
 	ror8 = lambda v: ((v >> 8) & (2 ** 32 - 1)) | ((v << 24) & (2 ** 32 - 1))
@@ -50,15 +49,15 @@ def replace_syscall_hashes(seed):
 	syscall_definitions = code.split('EXTERN_C DWORD SW2_GetSyscallNumber')[2]
 
 	for syscall_name in syscall_names:
-		regex = re.compile('#define ' + syscall_name + '.*?mov ecx, (0x[A-Fa-f0-9]{8})', re.DOTALL)
+		regex = re.compile('#define ' + syscall_name + '.*?mov ecx, (0x0[A-Fa-f0-9]{8})', re.DOTALL)
 		match = re.search(regex, syscall_definitions)
 		assert match is not None, f'hash of syscall {syscall_name} not found!'
 		old_hash = match.group(1)
 		new_hash = get_function_hash(seed, syscall_name)
-		print(f'{syscall_name} -> {old_hash} - 0x{new_hash:08X}')
+		print(f'{syscall_name} -> {old_hash} -> 0x0{new_hash:08X}')
 		code = code.replace(
 			old_hash,
-			f'0x{new_hash:08X}'
+			f'0x0{new_hash:08X}'
 		)
 
 	with open('Syscalls.h', 'w') as f:
@@ -67,7 +66,7 @@ def replace_syscall_hashes(seed):
 
 def main():
 	new_seed = random.randint(2 ** 28, 2 ** 32 - 1)
-	#new_seed = 0x1337c0de
+	#new_seed = 0x1337C0DE
 	old_seed = get_old_seed()
 	replace_seed(old_seed, new_seed)
 	replace_syscall_hashes(new_seed)
