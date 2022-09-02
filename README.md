@@ -1,6 +1,8 @@
 # Shhhloader
 Shhhloader is a SysWhispers/GetSyscallStub Shellcode Loader that is currently a Work in Progress. It takes raw shellcode as input and compiles a C++ stub that uses syscalls to try and bypass AV/EDR. The included python builder will work on any Linux system that has Mingw-w64 installed.
 
+**9/2/22 EDIT:** Cobalt Strike aggressor script has been created! [@S4ntiago_p](https://twitter.com/s4ntiago_p)'s API hashing script has also been integrated into the main python builder and will be executed each time SysWhispers2 is utilized.
+
 **8/9/22 EDIT:** Some BIG updates have been made! New major features include: GetSyscallStub integration, Obfuscator-LLVM support, Module Stomping, automatic DLL Proxy generation, new sandbox evasion methods, and storing shellcode as an English word array. **Big shout out to [@Snovvcrash](https://twitter.com/snovvcrash), [@spotheplanet](https://twitter.com/spotheplanet), [@_RastaMouse](https://twitter.com/_RastaMouse), and [@Cerbersec](https://twitter.com/cerbersec) whose code I used as a reference for this tool.**
 
 ```
@@ -62,6 +64,13 @@ Features:
 
 See below video demonstrating the Module Stomping shellcode injection technique executed via DLL Proxying with Windows Defender fully enabled. As seen in the video, the Obfuscator-LLVM and English word list options were also utilized to help evade detection: 
 <video src="https://user-images.githubusercontent.com/79864975/183701072-33ca68a2-74cd-435b-9069-745062e308e6.mp4"></video>
+
+Shhhloader also now contains an aggressor script for use with Cobalt Strike! Simply import the **Shhhloader.cna** file with the script manager to use. All files used/created by the aggressor script should be located in your locally cloned Shhhloader repo.
+<details>
+  <summary>See Screenshot</summary>
+
+<img alt="Aggressor Script Screenshot" src="https://i.imgur.com/9QWrneO.png"/>
+</details>
 
 Known Issues:
 * The Module Stomping method does not currently work with most stageless payloads. I believe this is due to a size limitation resulting from my shitty code or the DLL/function I am executing the shellcode in. For larger shellcode I recommend you use either the QueueUserAPC or RemoteThreadContext shellcode injection methods.

