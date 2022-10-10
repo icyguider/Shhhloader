@@ -80,7 +80,7 @@ sub Shhhloader {
     drow_combobox($dialog, "payload_type", "(*) Payload Type: ", @("Stageless", "Staged"));
     drow_combobox($dialog, "injection_method", "(*) Injection Method: ", @("QueueUserAPC", "ModuleStomping", "ProcessHollow", "EnumDisplayMonitors", "RemoteThreadContext", "RemoteThreadSuspended", "CurrentThread"));
     drow_combobox($dialog, "syscall_method", "(*) Syscall Method: ", @("SysWhispers2", "GetSyscallStub"));
-    drow_combobox($dialog, "encoding_method", "(*) Encoding Method: ", @("English Words", "XOR"));
+    drow_combobox($dialog, "encoding_method", "(*) Encoding Method: ", @("XOR", "English Words"));
     drow_combobox($dialog, "file_type", "(*) File Type: ", @("exe", "dll"));
     drow_combobox($dialog, "sandbox", "(#) Sandbox Evasion: ", @("domain", "hostname", "username", "sleep", "none"));
     drow_text($dialog, "sandboxarg", "(#) Sanbox Argument: ");
@@ -133,15 +133,6 @@ sub mainCallback {
             show_message("Selected sandbox evasion method requires an argument! Try again.");
             exit();
         }
-    }
-
-    if (($injection_method eq "ModuleStomping") && ($payload_type eq "Stageless")) {
-        show_message("Stageless payloads cannot be used with ModuleStomping! Try again.");
-        exit();
-    }
-    if (($injection_method eq "ProcessHollow") && ($payload_type eq "Stageless")) {
-        show_message("Stageless payloads cannot be used with ProcessHollow! Try again.");
-        exit();
     }
 
     if ($noppid eq "true"){
