@@ -2051,7 +2051,6 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
         stub = stub.replace("REPLACE_PROCESS_FUNCTIONS", "")
         stub = stub.replace("REPLACE_STUB_METHOD", CurrentThread_stub)
     if method == "modulestomping":
-        #Must use GetSyscallStub for Module Stomping. SysWhispers2 version is unstable, try at own risk.
         stub = stub.replace("REPLACE_THREADLESS_FUNCTIONS", "")
         stub = stub.replace("REPLACE_THREADLESS_DEFINITIONS", "")
         stub = stub.replace("REPLACE_PROCESS_FUNCTIONS", process_functions)
@@ -2083,9 +2082,6 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
         stub = stub.replace("REPLACE_EXPORT_FUNCTION", str(list(export_function))[1:-1])
         print(f"[+] Writing to {export_function} export function in {target_dll}")
         print("[+] Using {} for ThreadlessInject".format(process))
-        if syscall_arg == "syswhispers2":
-            print("[+] SysWhispers2 is not supported for this shellcode execution method!")
-            syscall_arg = "getsyscallstub"
 
     if word_encode == False:
         stub = stub.replace("REPLACE_ME_DECARG", "payload")
