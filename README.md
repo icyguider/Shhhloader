@@ -1,9 +1,9 @@
 # Shhhloader
 Shhhloader is a work in progress shellcode loader. It takes raw shellcode as input and compiles a C++ stub that does a bunch of different things to try and bypass AV/EDR. The included python builder will work on any Linux system that has Mingw-w64 installed.
 
-**4/12/23 EDIT: SysWhispers2 syscalls have been fixed and are supported again. They should now also work with all shellcode execution techniques. Stay tuned for the addition of more syscall execution methods soon. :)**
+**4/13/23 EDIT: SysWhispers3 support has been added. Thanks to [@KlezVirus](https://twitter.com/KlezVirus) for his work on the original project. SysWhispers2 syscalls have also been fixed and are supported again. In addition, both SW2 & SW3 should now work with all shellcode injection techniques. Stay tuned for the addition of more syscall execution methods soon. :)**
 
-**4/4/23 EDIT: ThreadlessInject has been added to Shhhloader! Thanks to [@\_EthicalChaos\_](https://twitter.com/_EthicalChaos_) for their [initial project](https://github.com/CCob/ThreadlessInject), and [0xLegacyy](https://twitter.com/0xLegacyy) for their [BOF version](https://github.com/iilegacyyii/ThreadlessInject-BOF) which was adapted for use here. In addition, unhooking NTDLL via KnownDLLs has been added thanks to [@D1rkMtr](https://twitter.com/D1rkMtr). Finally, SysWhispers2 has been deprecated in this version for various reasons. I am currently working on adding a HWBP syscall option which should be pushed later this month. See the "Planned Updates" section below for more information regarding future planned features.**
+**4/4/23 EDIT: ThreadlessInject has been added to Shhhloader! Thanks to [@\_EthicalChaos\_](https://twitter.com/_EthicalChaos_) for their [initial project](https://github.com/CCob/ThreadlessInject), and [0xLegacyy](https://twitter.com/0xLegacyy) for their [BOF version](https://github.com/iilegacyyii/ThreadlessInject-BOF) which was adapted for use here. In addition, unhooking NTDLL via KnownDLLs has been added thanks to [@D1rkMtr](https://twitter.com/D1rkMtr). ~~Finally, SysWhispers2 has been deprecated in this version for various reasons.~~ I am currently working on adding a HWBP syscall option which should be pushed later this month. See the "Planned Updates" section below for more information regarding future planned features.**
 
 ```
 ┳┻|
@@ -14,8 +14,8 @@ Shhhloader is a work in progress shellcode loader. It takes raw shellcode as inp
 ┻┳| •.•)  - Shhhhh, AV might hear us!
 ┳┻|⊂ﾉ
 ┻┳|
-usage: Shhhloader.py [-h] [-p explorer.exe] [-m QueueUserAPC] [-u] [-w] [-nr] [-ns] [-np] [-l] [-v] [-sc GetSyscallStub] [-d] [-dp apphelp.dll] [-s domain]
-                     [-sa testlab.local] [-o a.exe] [-cp] [-td ntdll.dll] [-ef NtClose]
+usage: Shhhloader.py [-h] [-p explorer.exe] [-m QueueUserAPC] [-u] [-w] [-nr] [-ns] [-np] [-l] [-v] [-sc GetSyscallStub] [-d] [-dp apphelp.dll]
+                     [-s domain] [-sa testlab.local] [-o a.exe] [-cp] [-td ntdll.dll] [-ef NtClose]
                      file
 
 ICYGUIDER'S CUSTOM SYSCALL SHELLCODE LOADER
@@ -39,7 +39,7 @@ options:
                         Use Obfuscator-LLVM to compile stub
   -v, --verbose         Enable debugging messages upon execution
   -sc GetSyscallStub, --syscall GetSyscallStub
-                        Syscall execution method (Options: SysWhispers2, GetSyscallStub, None) (Default: GetSyscallStub)
+                        Syscall execution method (Options: SysWhispers2, SysWhispers3, GetSyscallStub, None) (Default: GetSyscallStub)
   -d, --dll             Generate a DLL instead of EXE
   -dp apphelp.dll, --dll-proxy apphelp.dll
                         Create Proxy DLL using supplied legitimate DLL (File must exist in current dir)
@@ -64,13 +64,14 @@ ThreadlessInject:
 * PPID Spoofing
 * Block 3rd Party DLLs
 * Unhook NTDLL via KnownDLLs
-* GetSyscallStub & SysWhispers2
+* SysWhispers2, SysWhispers3, & GetSyscallStub
+* API Hashing for SW2 & SW3
 * Compile-Time String Encryption
 * Obfuscator-LLVM (OLLVM) Support 
 * Automatic DLL Proxy Generation
 * Syscall Name Randomization
 * Store Shellcode as English Word Array
-* XOR Encryption with Dynamic Key Generation
+* XOR Encoding with Dynamic Key Generation
 * Sandbox Evasion via Loaded DLL, Domain, User, Hostname, and System Enumeration
 
 See below for a PoC video of the ThreadlessInject method being used to inject a Havoc beacon into IE without generating any alerts and minimal events in Microsoft Defender for Endpoint (MDE) EDR (Recorded 4/3/2023):
@@ -91,6 +92,7 @@ Shhhloader also now contains an aggressor script for use with Cobalt Strike! Sim
 
 **Known Issues:**
 * The ThreadlessInject shellcode execution method must currently inject into a non-suspended process. This is done automatically for you if the "-cp" option is supplied. I hope to figure out a way to get it working with suspended processes soon.
+* The Cobalt Strike aggressor script has not been updated. It is probably broken unless used with older Shhhloader versions. It will be updated & fixed when I have time.
 * Windows Defender will detect most files generated by this tool, so please do not post an issue saying "DETECTED!!!". Play around with the new options and features until you get something that works; they were added for a reason :). Executing the generated file in memory is also a good way to evade these detections.
 * There are **a ton** of bugs in my code. Please test everything in advance before using for something important, and PLEASE provide as much information as possible when opening an issue. (THANKS!)
 
@@ -160,3 +162,4 @@ There is probably a better way to do this but this is what worked for me. If you
 * [@\_EthicalChaos\_](https://twitter.com/_EthicalChaos_) for their ThreadlessInject project: https://github.com/CCob/ThreadlessInject
 * [0xLegacyy](https://twitter.com/0xLegacyy) for their BOF version of ThreadlessInject: https://github.com/iilegacyyii/ThreadlessInject-BOF
 * [@D1rkMtr](https://twitter.com/D1rkMtr) for their ntdll unhooking collection project: https://github.com/TheD1rkMtr/ntdlll-unhooking-collection
+* [@KlezVirus](https://twitter.com/KlezVirus) for their SysWhispers3 project: https://github.com/klezVirus/SysWhispers3
