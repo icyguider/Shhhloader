@@ -88,12 +88,7 @@ int deC(unsigned char payload[])
     key = skCrypt("REPLACE_ME_KEY");
     for (int i = 0; i < payload_len; i++)
     {
-        char d = payload[i];
-        for (int z = 0; z < key.length(); z++)
-        {
-            d = d ^ (int)key[z];
-        }
-        decoded[i] = d;
+        decoded[i] = payload[i] ^ (int)key[i % key.length()];
     }
     key.clear();
     return 0;
@@ -1993,9 +1988,7 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
     if word_encode == False:
         encrypted = []
         for b in range(len(contents)):
-            test = contents[b]
-            for i in range(len(key)):
-                test = test ^ ord(key[i])
+            test = contents[b] ^ ord(key[b % len(key)])
             encrypted.append("{:02x}".format(test))
 
         stub = stub.replace("REPLACE_DECODE_FUNCTION", regularDecode)
