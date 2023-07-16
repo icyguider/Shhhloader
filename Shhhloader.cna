@@ -87,7 +87,6 @@ sub Shhhloader {
     drow_listener_stage($dialog, "listener", "(*) Listener: ");
     drow_combobox($dialog, "payload_type", "(*) Payload Type: ", @("Stageless", "Staged"));
     drow_combobox($dialog, "injection_method", "(*) Injection Method: ", @("QueueUserAPC", "ThreadlessInject" ,"ModuleStomping", "ProcessHollow", "EnumDisplayMonitors", "RemoteThreadContext", "RemoteThreadSuspended", "CurrentThread"));
-    
     drow_combobox($dialog, "syscall_method", "(*) Syscall Method: ", @("SysWhispers3","SysWhispers2", "GetSyscallStub","None"));
     drow_combobox($dialog, "encoding_method", "(*) Encoding Method: ", @("XOR", "English Words"));
     drow_combobox($dialog, "file_type", "(*) File Type: ", @("exe", "dll"));
@@ -196,11 +195,11 @@ sub mainCallback {
         $outname = "a.$ext";
     }
     
-    if ($cp eq "true"){
-        $ti = "-td $td -ef $ef -cp"
+    if (($cp eq "true") && ($injection_method eq "ThreadlessInject")){
+        $ti = " -td $td -ef $ef -cp"
     }
-    else {
-        $ti = "-td $td -ef $ef "
+    else if (($cp eq "false") && ($injection_method eq "ThreadlessInject")){
+        $ti = " -td $td -ef $ef"
     }
 
     $proc = "-p $injection_process";
@@ -218,7 +217,7 @@ sub GeneratePayload {
     writeb($handle, $shellcode);
     closef($handle);
 
-    $build_cmd = "python3 Shhhloader.py beacon.bin -m $injection_method $ti -sc $syscall_method $sb$sa$proc -o $outname $np$vb$ns$dll$ol$we$dp";
+    $build_cmd = "python3 Shhhloader.py beacon.bin -m $injection_method$ti -sc $syscall_method $sb$sa$proc -o $outname $np$vb$ns$dll$ol$we$dp";
 
     #Uncomment to debug call to python builder
     #show_message($build_cmd);
