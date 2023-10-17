@@ -12,6 +12,7 @@ from datetime import datetime
 
 # Configuration
 shhhloader_path = "/opt/Shhhloader"
+python_path = "/usr/bin/python3"
 
 # Variables & Defaults
 shellcode_path = ""
@@ -200,7 +201,7 @@ def run():
     if process != "":
         flags = flags + f" -p {process}"
 
-    cmd = f"python3 {shhhloader_path}/Shhhloader.py {shellcode_path} -sc {syscall_exec_method} -m {shellcode_exec_method} -o {outfile} {flags}"
+    cmd = f"{python_path} {shhhloader_path}/Shhhloader.py {shellcode_path} -sc {syscall_exec_method} -m {shellcode_exec_method} -o {outfile} {flags}"
 
     output = subprocess.run([arg for arg in cmd.split(" ") if arg != ""], capture_output = True, text = True)
 
