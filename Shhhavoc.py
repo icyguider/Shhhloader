@@ -32,25 +32,43 @@ ppid_priv_flag = ""
 parent_process = "explorer.exe"
 sandbox_evasion_method = "sleep"
 sandbox_argument = ""
+create_process_flag = ""
+target_dll = ""
+export_function = ""
+
+# Colors
+havoc_red = "#ff5555"
+havoc_green = "#50fa7b"
+havoc_blue = "#697197"
+havoc_grey = "#555766"
 
 if not os.path.exists(shhhloader_path):
     print("[-] Shhhloader not found in: ", shhhloader_path) 
+    havocui.messagebox("Shhhloader not found in: ", shhhloader_path)
 os.chdir(shhhloader_path)
 
 # Create dialog and log widget
 dialog = havocui.Dialog("Shhhloader Payload Generator")
-log = havocui.Widget("Shhhavoc Log")
+log = havocui.Logger("Shhhavoc Log")
 
 # Add Options
-dialog.addLabel("-------------------------- Required Settings ----------------------------")
-dialog.addLabel("[*] Shellcode")
+dialog.addLabel(f"<b>────────────────────────────── Required Settings ──────────────────────────────</b>")
+
+label_to_replace = f"<b style=\"color:{havoc_red};\">No shellcode selected.</b>"
+dialog.addLabel("<b>[*] Shellcode</b>")
 def change_shellcode_path(): 
     global shellcode_path
+    global label_to_replace
     shellcode_path = havocui.openfiledialog("Shellcode path").decode("ascii")
-    print("[*] Shellcode path changed: ", shellcode_path)
+    print("[*] Shellcode path changed: ", shellcode_path, ".")
+    formatted_shellcode_path = f"<span style=\"color:{havoc_green};\">{shellcode_path}</span>"
+    dialog.replaceLabel(label_to_replace, formatted_shellcode_path)
+    label_to_replace = formatted_shellcode_path if shellcode_path != " " else f"<b style=\"color:{havoc_red};\">No shellcode selected.</b>" 
 dialog.addButton("Choose shellcode", change_shellcode_path)
 
-dialog.addLabel("[*] Syscall execution method")
+dialog.addLabel(label_to_replace)
+
+dialog.addLabel("<b>[*] Syscall execution method</b>")
 syscall_exec_methods = ["SysWhispers2", "SysWhispers3", "None"]
 def change_syscall_exec_method(num):
     global syscall_exec_method
@@ -61,7 +79,7 @@ def change_syscall_exec_method(num):
     print("[*] Syscall execution method changed: ", syscall_exec_method) 
 dialog.addCombobox(change_syscall_exec_method, "GetSyscallStub", *syscall_exec_methods)
 
-dialog.addLabel("[*] Shellcode execution method")
+dialog.addLabel("<b>[*] Shellcode execution method</b>")
 shellcode_exec_methods = ["TreadlessInject", "ModuleStomping", "ProcessHollow", "EnumDisplayMonitors", "RemoteThreadCOntext", "RemoteThreadSuspended", "CurrentThread"]
 def change_shellcode_exec_method(num):
     global shellcode_exec_method
@@ -72,7 +90,7 @@ def change_shellcode_exec_method(num):
     print("[*] Shellcode execution method changed: ", shellcode_exec_method)
 dialog.addCombobox(change_shellcode_exec_method, "QueueUserAPC", *shellcode_exec_methods)
 
-dialog.addLabel("[*] Payload type")
+dialog.addLabel("<b>[*] Payload type</b>")
 payload_types = ["dll"]
 def change_payload_type(num):
     global dll_flag
@@ -83,15 +101,14 @@ def change_payload_type(num):
     print("[*] DLL flag changed: ", bool(dll_flag)) 
 dialog.addCombobox(change_payload_type, "exe", *payload_types)
 
-dialog.addLabel("[*] Injection Process (Default: explorer.exe)")
+dialog.addLabel("<b>[*] Injection Process (Default: explorer.exe)</b>")
 def change_process(p): 
     global process 
     process = p
     print("[*] Process changed: ", process)
 dialog.addLineedit("e.g. explorer.exe", change_process)
 
-dialog.addLabel("                                                                         ")
-dialog.addLabel("-------------------------- Optional Settings ----------------------------")
+dialog.addLabel("<b>────────────────────────────── Optional Settings ──────────────────────────────</b>")
 
 def change_verbose():
     global verbose_flag
@@ -135,8 +152,8 @@ def change_ppid_priv():
     print("[*] PPID-Priv flag changed: ", bool(ppid_priv_flag))
 dialog.addCheckbox("Enable spoofing for privileged parent process (Default: False)", change_ppid_priv)
 
-dialog.addLabel("                                                                         ")
-dialog.addLabel("[#] Word-encoding method (Default: XOR)")
+dialog.addLabel("")
+dialog.addLabel("<b>[#] Word-encoding method (Default: XOR)</b>")
 encoding_methods = ["English Words"]
 def change_encoding_method(num):
     global word_encode_flag
@@ -147,7 +164,7 @@ def change_encoding_method(num):
     print("[*] Word-encoding flag changed: ", bool(word_encode_flag)) 
 dialog.addCombobox(change_encoding_method, "XOR", *encoding_methods)
 
-dialog.addLabel("[#] Sandbox evasion technique (Default: sleep)")
+dialog.addLabel("<b>[#] Sandbox evasion technique (Default: sleep)</b>")
 sandbox_evasion_methods = ["domain", "hostname", "username", "dll"]
 def change_sandbox_evasion_method(num):
     global sandbox_evasion_method
@@ -158,21 +175,21 @@ def change_sandbox_evasion_method(num):
     print("[*] Sandbox evasion method changed: ", sandbox_evasion_method) 
 dialog.addCombobox(change_sandbox_evasion_method, "sleep", *sandbox_evasion_methods)
 
-dialog.addLabel("[#] Sandbox evasion argument")
+dialog.addLabel("<b>[#] Sandbox evasion argument</b>")
 def change_sandbox_argument(arg): 
     global sandbox_argument
     sandbox_argument = arg 
     print("[*] Sandbox argument changed: ", sandbox_argument)
 dialog.addLineedit("e.g. testlab.local", change_sandbox_argument)
 
-dialog.addLabel(f"[#] Proxy DLL (must exist in {shhhloader_path})")
+dialog.addLabel(f"<b>[#] Proxy DLL (must exist in {shhhloader_path})</b>")
 def change_proxy_dll(arg): 
     global proxy_dll
     proxy_dll = arg 
     print("[*] Proxy DLL changed: ", proxy_dll)
 dialog.addLineedit("e.g. apphelp.dll", change_proxy_dll)
 
-dialog.addLabel(f"[#] Parent process for PPID spoofing")
+dialog.addLabel(f"<b>[#] Parent process for PPID spoofing</b>")
 def change_parent_process(p): 
     global parent_process
     parent_process = p
@@ -205,13 +222,16 @@ def run():
 
     output = subprocess.run([arg for arg in cmd.split(" ") if arg != ""], capture_output = True, text = True)
 
-    log.addLabel("=================================================")
-    log.addLabel(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
-    log.addLabel(" ".join(output.args))
-    log.addLabel("=================================================")
-    log.addLabel(output.stdout)
-    log.addLabel(output.stderr)
-    log.addLabel("=================================================")
+    # Create Log
+    log.addText(f"<b style=\"color:{havoc_grey};\">──────────────────────────────────────────────────────────────────────────────────────────────────────────</b>")
+    log.addText(f"<b style=\"color:{havoc_blue};\">{datetime.now().strftime('%d/%m/%Y %H:%M:%S')} </b> [<span style=\"color:{havoc_green};\">*</span>] <span>{' '.join(output.args)}</span>")
+    log.addText(f"<b>Output:</b>")
+    log.addText(f"{output.stdout}")
+    if output.stderr != "":
+        log.addText(f"<b style=\"color:{havoc_red};\">Error:</b>")
+        log.addText(f"<span style=\"color:{havoc_red};\">{output.stderr}</span>")
+    else:
+        log.addText(f"<b style=\"color:{havoc_green};\">Payload generated successfully at {outfile}!</b>")
     log.setBottomTab()
 
     dialog.close()
