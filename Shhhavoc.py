@@ -283,8 +283,35 @@ def run():
 
     dialog.close()
 
+# Reset variable values
+def set_default_values():
+    global generate_from_listener, listener, syscall_exec_method, shellcode_exec_method, process, unhook_flag, dll_flag, proxy_dll, verbose_flag, word_encode_flag, no_randomize_flag, no_sandbox_flag, llvm_flag, ppid_flag, ppid_priv_flag, parent_process, sandbox_evasion_method, sandbox_argument, create_process_flag, target_dll, export_function
+
+    generate_from_listener = False
+    listener = ""
+    syscall_exec_method = "GetSyscallStub"
+    shellcode_exec_method = "QueueUserAPC"
+    process = "explorer.exe"
+    unhook_flag = ""
+    dll_flag = ""
+    proxy_dll = ""
+    verbose_flag = ""
+    word_encode_flag = ""
+    no_randomize_flag = ""
+    no_sandbox_flag = ""
+    llvm_flag = ""
+    ppid_flag = ""
+    ppid_priv_flag = ""
+    parent_process = "explorer.exe"
+    sandbox_evasion_method = "sleep"
+    sandbox_argument = ""
+    create_process_flag = ""
+    target_dll = "ntdll.dll"
+    export_function = "NtClose"
+
 def build(): 
     dialog.clear()
+    set_default_values()
 
     # Get Listeners
     global listeners
