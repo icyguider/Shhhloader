@@ -16,6 +16,7 @@ from base64 import b64decode, b64encode
 shhhloader_path = "/opt/Shhhloader"
 python_path = "/usr/bin/python3"
 payload_file_path = "/tmp/payload.bin"
+current_path = os.getcwd()
 
 # Variables & Defaults
 shellcode_path = ""
@@ -52,7 +53,7 @@ havoc_warning = "#ffb86c" # Orange
 if not os.path.exists(shhhloader_path):
     print("[-] Shhhloader not found in: ", shhhloader_path) 
     havocui.messagebox("Shhhloader not found in: ", shhhloader_path)
-os.chdir(shhhloader_path)
+os.chdir(current_path)
 
 # Create dialog and log widget
 dialog = havocui.Dialog("Shhhloader Payload Generator", True, 670, 800)
@@ -221,15 +222,27 @@ def execute(file):
     else:
         log.addText(f"[<span style=\"color:{havoc_success};\">+</span>] Output file path specified: {outfile}.")
     
+    # change dir
+    os.chdir(shhhloader_path)
+
+    # Exec Shhhloader and get output
     cmd = f"{python_path} {shhhloader_path}/Shhhloader.py {file} -sc {syscall_exec_method} -m {shellcode_exec_method} -o {outfile} {flags}"
-    output = subprocess.run([arg for arg in cmd.split(" ") if arg != ""], capture_output = True, text = True)
+    try:
+        output = subprocess.run([arg for arg in cmd.split(" ") if arg != ""], capture_output = True)
+        decoded_stdout = output.stdout.decode("utf-8")
+        decoded_stderr = output.stderr.decode("utf-8")
+    except Exception as e:
+        print(e)
+
+    # reset dir
+    os.chdir(current_path)
 
     # Create Log
     log.addText(f"[<span style=\"color:{havoc_info};\">*</span>] <span>{' '.join(output.args)}</span>")
-    log.addText(f"{output.stdout}")
-    if output.stderr != "":
+    log.addText(f"{decoded_stdout}")
+    if output.stderr != b"":
         log.addText(f"<b style=\"color:{havoc_error};\">Error:</b>")
-        log.addText(f"<span style=\"color:{havoc_error};\">{output.stderr}</span>")
+        log.addText(f"<span style=\"color:{havoc_error};\">{decoded_stderr}</span>")
     else:
         log.addText(f"<b style=\"color:{havoc_success};\">Payload generated successfully at {outfile}!</b>")
     log.setBottomTab()
