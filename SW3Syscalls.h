@@ -8,7 +8,7 @@
 
 #include <windows.h>
 
-#define SW3_SEED 0x5DBBA8DF
+#define SW3_SEED 0x2966FA4D
 #define SW3_ROL8(v) (v << 8 | v >> 24)
 #define SW3_ROR8(v) (v >> 8 | v << 24)
 #define SW3_ROX8(v) ((SW3_SEED % 2) ? SW3_ROL8(v) : SW3_ROR8(v))
@@ -211,6 +211,12 @@ EXTERN_C NTSTATUS NtSetContextThread(
 EXTERN_C NTSTATUS NtDelayExecution(
     IN BOOLEAN Alertable,
     IN PLARGE_INTEGER DelayInterval);
+
+EXTERN_C NTSTATUS NtFreeVirtualMemory(
+    IN HANDLE ProcessHandle,
+    IN OUT PVOID * BaseAddress,
+    IN OUT PSIZE_T RegionSize,
+    IN ULONG FreeType);
 
 // Code below is adapted from @modexpblog. Read linked article for more details.
 // https://www.mdsec.co.uk/2020/12/bypassing-user-mode-hooks-and-direct-invocation-of-system-calls-for-red-teams
@@ -469,10 +475,10 @@ __asm__("NewNtQueryInformationProcess: \n\
     mov [rsp+24], r8\n\
     mov [rsp+32], r9\n\
     sub rsp, 0x28\n\
-    mov ecx, 0x0C238D995\n\
+    mov ecx, 0x0922889A5\n\
     call SW3_GetRandomSyscallAddress\n\
     mov r15, rax\n\
-    mov ecx, 0x0C238D995\n\
+    mov ecx, 0x0922889A5\n\
     call SW3_GetSyscallNumber\n\
     add rsp, 0x28\n\
     mov rcx, [rsp+8]\n\
@@ -489,10 +495,10 @@ __asm__("NtReadVirtualMemory: \n\
     mov [rsp+24], r8\n\
     mov [rsp+32], r9\n\
     sub rsp, 0x28\n\
-    mov ecx, 0x003910903\n\
+    mov ecx, 0x401D34F45\n\
     call SW3_GetRandomSyscallAddress\n\
     mov r15, rax\n\
-    mov ecx, 0x003910903\n\
+    mov ecx, 0x01D9D2B13\n\
     call SW3_GetSyscallNumber\n\
     add rsp, 0x28\n\
     mov rcx, [rsp+8]\n\
@@ -509,10 +515,10 @@ __asm__("NtProtectVirtualMemory: \n\
     mov [rsp+24], r8\n\
     mov [rsp+32], r9\n\
     sub rsp, 0x28\n\
-    mov ecx, 0x09D0CB3AB\n\
+    mov ecx, 0x0B832AC90\n\
     call SW3_GetRandomSyscallAddress\n\
     mov r15, rax\n\
-    mov ecx, 0x09D0CB3AB\n\
+    mov ecx, 0x0B832AC90\n\
     call SW3_GetSyscallNumber\n\
     add rsp, 0x28\n\
     mov rcx, [rsp+8]\n\
@@ -529,10 +535,10 @@ __asm__("NtWriteVirtualMemory: \n\
     mov [rsp+24], r8\n\
     mov [rsp+32], r9\n\
     sub rsp, 0x28\n\
-    mov ecx, 0x0079A3D29\n\
+    mov ecx, 0x00D941B1B\n\
     call SW3_GetRandomSyscallAddress\n\
     mov r15, rax\n\
-    mov ecx, 0x0079A3D29\n\
+    mov ecx, 0x00D941B1B\n\
     call SW3_GetSyscallNumber\n\
     add rsp, 0x28\n\
     mov rcx, [rsp+8]\n\
@@ -549,10 +555,10 @@ __asm__("NtResumeThread: \n\
     mov [rsp+24], r8\n\
     mov [rsp+32], r9\n\
     sub rsp, 0x28\n\
-    mov ecx, 0x0BE9FB429\n\
+    mov ecx, 0x026B22C07\n\
     call SW3_GetRandomSyscallAddress\n\
     mov r15, rax\n\
-    mov ecx, 0x0BE9FB429\n\
+    mov ecx, 0x026B22C07\n\
     call SW3_GetSyscallNumber\n\
     add rsp, 0x28\n\
     mov rcx, [rsp+8]\n\
@@ -569,10 +575,10 @@ __asm__("NewNtClose: \n\
     mov [rsp+24], r8\n\
     mov [rsp+32], r9\n\
     sub rsp, 0x28\n\
-    mov ecx, 0x014C3E2AB\n\
+    mov ecx, 0x01E893519\n\
     call SW3_GetRandomSyscallAddress\n\
     mov r15, rax\n\
-    mov ecx, 0x014C3E2AB\n\
+    mov ecx, 0x01E893519\n\
     call SW3_GetSyscallNumber\n\
     add rsp, 0x28\n\
     mov rcx, [rsp+8]\n\
@@ -589,10 +595,10 @@ __asm__("NtOpenProcess: \n\
     mov [rsp+24], r8\n\
     mov [rsp+32], r9\n\
     sub rsp, 0x28\n\
-    mov ecx, 0x0E729C486\n\
+    mov ecx, 0x0612191AC\n\
     call SW3_GetRandomSyscallAddress\n\
     mov r15, rax\n\
-    mov ecx, 0x0E729C486\n\
+    mov ecx, 0x0612191AC\n\
     call SW3_GetSyscallNumber\n\
     add rsp, 0x28\n\
     mov rcx, [rsp+8]\n\
@@ -609,10 +615,10 @@ __asm__("NtAllocateVirtualMemory: \n\
     mov [rsp+24], r8\n\
     mov [rsp+32], r9\n\
     sub rsp, 0x28\n\
-    mov ecx, 0x041D14B43\n\
+    mov ecx, 0x019910F1F\n\
     call SW3_GetRandomSyscallAddress\n\
     mov r15, rax\n\
-    mov ecx, 0x041D14B43\n\
+    mov ecx, 0x019910F1F\n\
     call SW3_GetSyscallNumber\n\
     add rsp, 0x28\n\
     mov rcx, [rsp+8]\n\
@@ -629,10 +635,10 @@ __asm__("NtCreateThreadEx: \n\
     mov [rsp+24], r8\n\
     mov [rsp+32], r9\n\
     sub rsp, 0x28\n\
-    mov ecx, 0x04AA487D1\n\
+    mov ecx, 0x01C3F5E85\n\
     call SW3_GetRandomSyscallAddress\n\
     mov r15, rax\n\
-    mov ecx, 0x04AA487D1\n\
+    mov ecx, 0x01C3F5E85\n\
     call SW3_GetSyscallNumber\n\
     add rsp, 0x28\n\
     mov rcx, [rsp+8]\n\
@@ -649,10 +655,10 @@ __asm__("NewNtWaitForSingleObject: \n\
     mov [rsp+24], r8\n\
     mov [rsp+32], r9\n\
     sub rsp, 0x28\n\
-    mov ecx, 0x088A6EA58\n\
+    mov ecx, 0x0390635A9\n\
     call SW3_GetRandomSyscallAddress\n\
     mov r15, rax\n\
-    mov ecx, 0x088A6EA58\n\
+    mov ecx, 0x0390635A9\n\
     call SW3_GetSyscallNumber\n\
     add rsp, 0x28\n\
     mov rcx, [rsp+8]\n\
@@ -669,10 +675,10 @@ __asm__("NtQueueApcThread: \n\
     mov [rsp+24], r8\n\
     mov [rsp+32], r9\n\
     sub rsp, 0x28\n\
-    mov ecx, 0x0B2AD2D97\n\
+    mov ecx, 0x00EBA0413\n\
     call SW3_GetRandomSyscallAddress\n\
     mov r15, rax\n\
-    mov ecx, 0x0B2AD2D97\n\
+    mov ecx, 0x00EBA0413\n\
     call SW3_GetSyscallNumber\n\
     add rsp, 0x28\n\
     mov rcx, [rsp+8]\n\
@@ -689,10 +695,10 @@ __asm__("NtAlertResumeThread: \n\
     mov [rsp+24], r8\n\
     mov [rsp+32], r9\n\
     sub rsp, 0x28\n\
-    mov ecx, 0x062CD6C67\n\
+    mov ecx, 0x00AA4083D\n\
     call SW3_GetRandomSyscallAddress\n\
     mov r15, rax\n\
-    mov ecx, 0x062CD6C67\n\
+    mov ecx, 0x00AA4083D\n\
     call SW3_GetSyscallNumber\n\
     add rsp, 0x28\n\
     mov rcx, [rsp+8]\n\
@@ -709,10 +715,10 @@ __asm__("NtGetContextThread: \n\
     mov [rsp+24], r8\n\
     mov [rsp+32], r9\n\
     sub rsp, 0x28\n\
-    mov ecx, 0x03C933E35\n\
+    mov ecx, 0x0F668AAC9\n\
     call SW3_GetRandomSyscallAddress\n\
     mov r15, rax\n\
-    mov ecx, 0x03C933E35\n\
+    mov ecx, 0x0F668AAC9\n\
     call SW3_GetSyscallNumber\n\
     add rsp, 0x28\n\
     mov rcx, [rsp+8]\n\
@@ -729,10 +735,10 @@ __asm__("NtSetContextThread: \n\
     mov [rsp+24], r8\n\
     mov [rsp+32], r9\n\
     sub rsp, 0x28\n\
-    mov ecx, 0x028A43A2D\n\
+    mov ecx, 0x03A96B7BF\n\
     call SW3_GetRandomSyscallAddress\n\
     mov r15, rax\n\
-    mov ecx, 0x028A43A2D\n\
+    mov ecx, 0x03A96B7BF\n\
     call SW3_GetSyscallNumber\n\
     add rsp, 0x28\n\
     mov rcx, [rsp+8]\n\
@@ -749,10 +755,30 @@ __asm__("NtDelayExecution: \n\
     mov [rsp+24], r8\n\
     mov [rsp+32], r9\n\
     sub rsp, 0x28\n\
-    mov ecx, 0x04ACE6457\n\
+    mov ecx, 0x04ADF0C0B\n\
     call SW3_GetRandomSyscallAddress\n\
     mov r15, rax\n\
-    mov ecx, 0x04ACE6457\n\
+    mov ecx, 0x04ADF0C0B\n\
+    call SW3_GetSyscallNumber\n\
+    add rsp, 0x28\n\
+    mov rcx, [rsp+8]\n\
+    mov rdx, [rsp+16]\n\
+    mov r8, [rsp+24]\n\
+    mov r9, [rsp+32]\n\
+    mov r10, rcx\n\
+    jmp r15\n\
+");
+#define NtFreeVirtualMemory NtFreeVirtualMemory
+__asm__("NtFreeVirtualMemory: \n\
+    mov [rsp +8], rcx\n\
+    mov [rsp+16], rdx\n\
+    mov [rsp+24], r8\n\
+    mov [rsp+32], r9\n\
+    sub rsp, 0x28\n\
+    mov ecx, 0x00F9D1AF1\n\
+    call SW3_GetRandomSyscallAddress\n\
+    mov r15, rax\n\
+    mov ecx, 0x00F9D1AF1\n\
     call SW3_GetSyscallNumber\n\
     add rsp, 0x28\n\
     mov rcx, [rsp+8]\n\

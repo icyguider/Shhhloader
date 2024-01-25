@@ -89,7 +89,7 @@ def change_syscall_exec_method(num):
         syscall_exec_method = "GetSyscallStub"
     print("[*] Syscall execution method changed: ", syscall_exec_method) 
 
-shellcode_exec_methods = ["ThreadlessInject", "ModuleStomping", "ProcessHollow", "EnumDisplayMonitors", "RemoteThreadContext", "RemoteThreadSuspended", "CurrentThread"]
+shellcode_exec_methods = ["PoolParty", "PoolPartyModuleStomping", "ThreadlessInject", "ModuleStomping", "ProcessHollow", "EnumDisplayMonitors", "RemoteThreadContext", "RemoteThreadSuspended", "CurrentThread"]
 def change_shellcode_exec_method(num):
     global shellcode_exec_method
     if num:

