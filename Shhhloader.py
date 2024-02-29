@@ -525,7 +525,7 @@ NoSyscall_StubP2 = """
 """
 
 sleep_check = """
-BOOL SleepCheck() {
+VOID SleepCheck() {
     ULONG64 timeBeforeSleep = GetTickCount64();
 
     for (;;) {
@@ -2767,7 +2767,7 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
         if obfuscator_LLVM == True:
             print("[+] Using Obfuscator-LLVM to compile stub...")
             # Feel free to modify the OLLVM flags to fit your needs.
-            os.system("x86_64-w64-mingw32-clang++ stub.cpp -s -w -fpermissive -std=c++2a -static -lpsapi -lntdll -Wl,--subsystem,console -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -mllvm -sobf -o {}".format(outfile))
+            os.system("x86_64-w64-mingw32-clang++ stub.cpp -s -w -fpermissive -std=c++2a -static -lpsapi -lntdll -Wl,--subsystem,console -pthread -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -o {}".format(outfile))
         else:
             os.system("x86_64-w64-mingw32-g++ stub.cpp -s -w -std=c++17 -masm=intel -fpermissive -static -lntdll -lpsapi -Wl,--subsystem,console -o {}".format(outfile))
     else:
@@ -2775,12 +2775,12 @@ def main(stub, infile, outfile, key, process, method, no_randomize, verbose, san
             print("[+] Using Obfuscator-LLVM to compile stub...")
             # Feel free to modify the OLLVM flags to fit your needs.
             if dll == True and dll_proxy != None:
-                os.system("x86_64-w64-mingw32-clang++ stub.cpp stub.def -s -w -fpermissive -std=c++2a -static -lpsapi -lntdll -Wl,--subsystem,windows -shared -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -mllvm -sobf -o {}".format(outfile))
+                os.system("x86_64-w64-mingw32-clang++ stub.cpp stub.def -s -w -fpermissive -std=c++2a -static -lpsapi -lntdll -Wl,--subsystem,windows -pthread -shared -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -o {}".format(outfile))
                 os.system("rm stub.def")
             elif dll == True and dll_proxy == None:
-                os.system("x86_64-w64-mingw32-clang++ stub.cpp -s -w -fpermissive -std=c++2a -static -lpsapi -lntdll -Wl,--subsystem,windows -shared -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -mllvm -sobf -o {}".format(outfile))
+                os.system("x86_64-w64-mingw32-clang++ stub.cpp -s -w -fpermissive -std=c++2a -static -lpsapi -lntdll -Wl,--subsystem,windows -pthread -shared -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -o {}".format(outfile))
             else:
-                os.system("x86_64-w64-mingw32-clang++ stub.cpp -s -w -fpermissive -std=c++2a -static -lpsapi -lntdll -Wl,--subsystem,windows -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -mllvm -sobf -o {}".format(outfile))
+                os.system("x86_64-w64-mingw32-clang++ stub.cpp -s -w -fpermissive -std=c++2a -static -lpsapi -lntdll -Wl,--subsystem,windows -pthread -Xclang -flto-visibility-public-std -mllvm -bcf -mllvm -sub -mllvm -fla -mllvm -split -mllvm -bcf_loop=1 -mllvm -sub_loop=1 -o {}".format(outfile))
         else:
             if dll == True and dll_proxy != None:
                 os.system("x86_64-w64-mingw32-g++ stub.cpp stub.def -s -w -std=c++17 -masm=intel -fpermissive -static -lpsapi -lntdll -Wl,--subsystem,windows -shared -o {}".format(outfile))
