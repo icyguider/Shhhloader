@@ -78,7 +78,7 @@ def change_shellcode_path():
     print("[*] Shellcode path changed: ", shellcode_path, ".")
     formatted_shellcode_path = f"<span style=\"color:{havoc_success};\">{shellcode_path}</span>"
     dialog.replaceLabel(label_to_replace, formatted_shellcode_path)
-    label_to_replace = formatted_shellcode_path if shellcode_path != " " else f"<b style=\"color:{havoc_error};\">No shellcode selected.</b>" 
+    label_to_replace = formatted_shellcode_path if shellcode_path != "" else f"<b style=\"color:{havoc_error};\">No shellcode selected.</b>" 
 
 syscall_exec_methods = ["SysWhispers2", "SysWhispers3", "None"]
 def change_syscall_exec_method(num):
