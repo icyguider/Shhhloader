@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- Coding: UTF-8 -*-
-# Author: Jakob Friedl
+# Author: Jakob Friedl, @icyguider
 # Created on: Mon, 16. Oct 2023
 # Description: Shhhloader support for Havoc C2 framework
 # Usage: Load this script into Havoc: Scripts -> Scripts Manager -> Load to create Shhhloader Tab
@@ -13,7 +13,7 @@ from datetime import datetime
 from base64 import b64decode, b64encode
 
 # Configuration
-shhhloader_path = "/opt/Shhhloader"
+shhhloader_path = "/opt/Shhhloader" # Modify this if you want to change the default directory this script looks for Shhhloader in
 python_path = "/usr/bin/python3"
 payload_file_path = "/tmp/payload.bin"
 current_path = os.getcwd()
@@ -50,11 +50,6 @@ havoc_dark = "#555766" # Dark Grey
 havoc_info = "#8be9fd" # Cyan
 havoc_warning = "#ffb86c" # Orange
 
-if not os.path.exists(shhhloader_path):
-    print("[-] Shhhloader not found in: ", shhhloader_path) 
-    havocui.messagebox("Shhhloader not found in: ", shhhloader_path)
-os.chdir(current_path)
-
 # Create dialog and log widget
 dialog = havocui.Dialog("Shhhloader Payload Generator", True, 670, 800)
 log = havocui.Logger("Shhhavoc Log")
@@ -69,6 +64,11 @@ def change_listener(num):
     else:
         generate_from_listener = False
     print("[*] Listener changed: ", listener)
+
+def change_ShhhloaderPath(p): 
+    global shhhloader_path
+    shhhloader_path = p
+    print("[*] Shhhloader path changed: ", process)
 
 label_to_replace = f"<b style=\"color:{havoc_error};\">No shellcode selected.</b>"
 def change_shellcode_path(): 
@@ -196,7 +196,13 @@ def change_export_function(arg):
     print("[*] Export function changed: ", export_function)
 
 # Execute Shhhloader and get output
-def execute(file): 
+def execute(file):
+    if os.path.isfile(f"{shhhloader_path}/Shhhloader.py") == False:
+        print("[-] Shhhloader not found in default/supplied path!: ", shhhloader_path)
+        log.addText(f"[<span style=\"color:{havoc_error};\">-</span>] Shhhloader not found in default/supplied path!: {shhhloader_path}")
+        havocui.messagebox("Error", f"Shhhloader not found in default/supplied path!")
+        return
+
     flags = f"{unhook_flag} {dll_flag} {verbose_flag} {llvm_flag} {no_randomize_flag} {no_sandbox_flag} {word_encode_flag} {ppid_flag} {ppid_priv_flag}"
     
     if sandbox_evasion_method != "sleep":
@@ -262,7 +268,8 @@ def run():
     log.addText(f"<b style=\"color:{havoc_comment};\">{datetime.now().strftime('%d/%m/%Y %H:%M:%S')} </b>")
     
     # Generate shellcode from listener
-    if generate_from_listener: 
+    if generate_from_listener:
+        log.addText(f"[<span style=\"color:{havoc_info};\">*</span>] Warning: Generating a payload directly from a listener is broken!</b>")
         log.addText(f"[<span style=\"color:{havoc_info};\">*</span>] Generating payload for listener: <b style=\"color:{havoc_info};\">{listener}</b>")
         
         # Generate demon shellcode
@@ -332,6 +339,8 @@ def build():
 
     # Build Dialog
     dialog.addLabel(f"<b>────────────────────────────── Required Settings ──────────────────────────────</b>")
+    dialog.addLabel("<b>[*] Shhhloader location (Edit plugin to change default)</b>")
+    dialog.addLineedit(shhhloader_path, change_ShhhloaderPath)
     dialog.addLabel("<b>[*] Shellcode (upload file or generate from Havoc listener)</b>")
     dialog.addCombobox(change_listener, "Upload from file", *listeners)
     dialog.addButton("Choose shellcode", change_shellcode_path)
