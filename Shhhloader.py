@@ -16,6 +16,7 @@ inspiration = """
 """
 
 stub = """
+#include <cstdint> //fix for "stub.cpp:533:5: error: ‘uint32_t’ was not declared in this scope"
 #define _WIN32_WINNT 0x0600
 #include <iostream>
 #include <windows.h>
